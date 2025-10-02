@@ -3,7 +3,7 @@
  * Defines user accounts with authentication and trading preferences
  */
 
-const { DataTypes } = require('sequelize');
+const { DataTypes, Op } = require('sequelize');
 const bcrypt = require('bcrypt');
 const { sequelize } = require('../config/database');
 
@@ -36,142 +36,25 @@ const User = sequelize.define('User', {
   password: {
     type: DataTypes.STRING,
     allowNull: false,
+    field: 'password_hash',
     validate: {
       len: [8, 255],
-    },
-  },
-  firstName: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    validate: {
-      len: [1, 50],
-    },
-  },
-  lastName: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    validate: {
-      len: [1, 50],
     },
   },
   isActive: {
     type: DataTypes.BOOLEAN,
     defaultValue: true,
+    field: 'is_active',
   },
-  isVerified: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
-  },
-  lastLoginAt: {
+  lastLogin: {
     type: DataTypes.DATE,
     allowNull: true,
-  },
-  refreshToken: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-  },
-  // Trading Preferences (as per CLAUDE.md specification)
-  tradingFrequency: {
-    type: DataTypes.ENUM('scalping', 'daytrading', 'swing', 'position'),
-    defaultValue: 'daytrading',
-    allowNull: false,
-  },
-  riskLevel: {
-    type: DataTypes.INTEGER,
-    defaultValue: 5,
-    allowNull: false,
-    validate: {
-      min: 1,
-      max: 10,
-    },
-  },
-  preferredPairs: {
-    type: DataTypes.JSON,
-    defaultValue: ['EUR/USD', 'GBP/USD', 'USD/JPY'],
-    allowNull: false,
-    validate: {
-      isValidPairs(value) {
-        if (!Array.isArray(value)) {
-          throw new Error('Preferred pairs must be an array');
-        }
-        if (value.length === 0) {
-          throw new Error('At least one preferred pair is required');
-        }
-        const pairRegex = /^[A-Z]{3}\/[A-Z]{3}$/;
-        for (const pair of value) {
-          if (!pairRegex.test(pair)) {
-            throw new Error(`Invalid currency pair format: ${pair}`);
-          }
-        }
-      },
-    },
-  },
-  tradingStyle: {
-    type: DataTypes.ENUM('trend', 'counter-trend', 'mixed'),
-    defaultValue: 'mixed',
-    allowNull: false,
-  },
-  // Technical Indicators Preferences
-  indicators: {
-    type: DataTypes.JSON,
-    defaultValue: {
-      sma: { enabled: true, period: 20 },
-      rsi: { enabled: true, period: 14 },
-      macd: { enabled: true, fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 },
-      bollinger: { enabled: false, period: 20, standardDeviations: 2 },
-      stochastic: { enabled: false, kPeriod: 14, dPeriod: 3 },
-    },
-    allowNull: false,
-    validate: {
-      isValidIndicators(value) {
-        if (typeof value !== 'object' || value === null) {
-          throw new Error('Indicators must be an object');
-        }
-
-        const validIndicators = ['sma', 'rsi', 'macd', 'bollinger', 'stochastic'];
-        for (const [key, config] of Object.entries(value)) {
-          if (!validIndicators.includes(key)) {
-            throw new Error(`Invalid indicator: ${key}`);
-          }
-          if (typeof config !== 'object' || !config.hasOwnProperty('enabled')) {
-            throw new Error(`Indicator ${key} must have an 'enabled' property`);
-          }
-        }
-      },
-    },
-  },
-  // Notification Preferences
-  discordUserId: {
-    type: DataTypes.STRING,
-    allowNull: true,
-  },
-  notificationSettings: {
-    type: DataTypes.JSON,
-    defaultValue: {
-      enableSignals: true,
-      enableMarketUpdates: false,
-      enableNewsAlerts: false,
-      maxSignalsPerDay: 10,
-      signalStrengthThreshold: 0.7,
-    },
-    allowNull: false,
-  },
-  // Account Settings
-  timezone: {
-    type: DataTypes.STRING,
-    defaultValue: 'UTC',
-    allowNull: false,
-  },
-  language: {
-    type: DataTypes.STRING,
-    defaultValue: 'en',
-    allowNull: false,
-    validate: {
-      isIn: [['en', 'zh', 'es', 'fr', 'de', 'ja']],
-    },
+    field: 'last_login',
   },
 }, {
   tableName: 'users',
+  paranoid: false,
+  underscored: true,
   indexes: [
     {
       unique: true,
@@ -180,9 +63,6 @@ const User = sequelize.define('User', {
     {
       unique: true,
       fields: ['username'],
-    },
-    {
-      fields: ['isActive', 'isVerified'],
     },
   ],
   hooks: {
@@ -237,7 +117,7 @@ User.prototype.toSafeObject = function() {
 User.findByIdentifier = async function(identifier) {
   return await this.findOne({
     where: {
-      [sequelize.Op.or]: [
+      [Op.or]: [
         { email: identifier },
         { username: identifier },
       ],

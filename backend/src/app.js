@@ -49,6 +49,8 @@ const corsOptions = {
     const allowedOrigins = [
       process.env.CORS_ORIGIN || 'http://localhost:5173',
       'http://localhost:3000',
+      'http://144.24.41.178',
+      'http://10.0.0.199',
     ];
 
     // Allow requests with no origin (mobile apps, etc.)

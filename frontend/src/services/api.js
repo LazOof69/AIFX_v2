@@ -63,12 +63,12 @@ apiClient.interceptors.response.use(
 export const authAPI = {
   /**
    * Login user
-   * @param {string} email - User email
+   * @param {string} identifier - User email or username
    * @param {string} password - User password
    * @returns {Promise} Login response
    */
-  login: async (email, password) => {
-    const response = await apiClient.post('/auth/login', { email, password });
+  login: async (identifier, password) => {
+    const response = await apiClient.post('/auth/login', { identifier, password });
     if (response.success) {
       localStorage.setItem('accessToken', response.data.accessToken);
       localStorage.setItem('refreshToken', response.data.refreshToken);

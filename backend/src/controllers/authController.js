@@ -116,21 +116,26 @@ exports.register = async (req, res) => {
  */
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { identifier, password } = req.body;
 
     // Validate input
-    if (!email || !password) {
+    if (!identifier || !password) {
       return res.status(400).json({
         success: false,
         data: null,
-        error: 'Email and password are required',
+        error: 'Email/username and password are required',
         timestamp: new Date().toISOString(),
       });
     }
 
-    // Find user
+    // Find user by email or username
     const user = await User.findOne({
-      where: { email },
+      where: {
+        [require('sequelize').Op.or]: [
+          { email: identifier },
+          { username: identifier }
+        ]
+      }
     });
 
     if (!user) {
