@@ -1,0 +1,27 @@
+{
+  "name": "aifx-v2-discord-bot",
+  "version": "1.0.0",
+  "description": "Discord bot for AIFX_v2 trading signals and notifications",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "nodemon bot.js",
+    "deploy-commands": "node deploy-commands.js"
+  },
+  "keywords": ["discord", "bot", "forex", "trading", "notifications"],
+  "author": "AIFX Team",
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.14.0",
+    "dotenv": "^16.0.0",
+    "axios": "^1.0.0",
+    "redis": "^4.0.0",
+    "winston": "^3.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

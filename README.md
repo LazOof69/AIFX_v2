@@ -1,276 +1,412 @@
-# AIFX_v2 - AI-Powered Forex Trading Advisory System
+# AIFX v2 - AI-Powered Forex Trading Advisory System
 
-An advanced AI-powered forex trading advisory system that provides intelligent trading signals and comprehensive market analysis through web interface and Discord notifications.
+<div align="center">
 
-## Project Architecture
+**Intelligent Trading Signals | Real-time Analysis | Personalized Recommendations**
 
-### Core Components
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
+[![React](https://img.shields.io/badge/React-18.2-blue.svg)](https://reactjs.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-blue.svg)](https://www.postgresql.org/)
+[![Coverage](https://img.shields.io/badge/Coverage-70%25-brightgreen.svg)](https://github.com/yourusername/AIFX_v2)
+
+</div>
+
+---
+
+## 📋 Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Getting Started](#getting-started)
+- [API Documentation](#api-documentation)
+- [Environment Variables](#environment-variables)
+- [Testing](#testing)
+- [Deployment](#deployment)
+- [License](#license)
+
+---
+
+## 🎯 Overview
+
+AIFX v2 is an AI-powered forex trading advisory system that provides intelligent trading signals, real-time market analysis, and personalized recommendations. The system combines technical analysis, sentiment analysis, and machine learning to deliver high-confidence trading signals across multiple currency pairs.
+
+### Key Objectives
+
+- ⚡ **Accuracy**: Provide trading signals with >70% confidence
+- 🔄 **Real-time**: Deliver signals via WebSocket instantly
+- 🎯 **Personalization**: Tailor recommendations to user risk tolerance
+- 📊 **Transparency**: Explain signals with technical factors
+- 🌐 **Accessibility**: Web and Discord interfaces
+
+---
+
+## ✨ Features
+
+### 🔐 Authentication & Security
+- JWT-based authentication with refresh tokens
+- Bcrypt password hashing (10 rounds)
+- Rate limiting (100 req/15 min)
+- Helmet.js security headers
+- Input validation with Joi
+
+### 📊 Trading Signals
+- AI-generated signals for 12+ currency pairs
+- Multi-factor analysis (Technical, Sentiment, ML)
+- Risk management with stop-loss/take-profit
+- Confidence scores (0.0-1.0)
+- Multiple timeframes (1min to daily)
+
+### 📈 Market Data
+- Real-time price feeds
+- Historical data with configurable timeframes
+- Technical indicators (SMA, RSI, MACD, BB)
+- Market overview dashboard
+
+### ⚙️ Personalization
+- Trading frequency (scalping, day, swing, position)
+- Risk level (1-10 scale)
+- Preferred currency pairs
+- Trading style (trend, counter-trend, mixed)
+- Custom indicator configurations
+
+### 🔔 Notifications
+- Multi-channel (Email, Discord, Browser)
+- Signal type filtering (Buy, Sell, Hold)
+- Confidence threshold settings
+- Priority levels (Low, Medium, High, Urgent)
+
+### 📱 Real-time Updates
+- WebSocket for instant updates
+- Price streaming
+- Signal notifications
+- Market updates
+
+### 📉 Analytics
+- Win rate tracking
+- Performance metrics (7d, 30d, 90d, 1y)
+- Trade history with P&L
+- Best/worst trade analysis
+
+---
+
+## 🏗️ Architecture
 
 ```
-AIFX_v2/
-├── backend/          # Node.js API Server (Express.js)
-├── frontend/         # React Web Application (Vite)
-├── ml_engine/        # Python ML Services (TensorFlow/scikit-learn)
-├── discord_bot/      # Discord Bot Service (Discord.js)
-├── database/         # Database Migrations and Seeds
-├── docker-compose.yml # Infrastructure setup
-└── CLAUDE.md         # Development guidelines
+┌─────────────────┐
+│   React Web     │
+│   Application   │
+└────────┬────────┘
+         │ HTTPS
+         ▼
+┌─────────────────┐      ┌──────────────┐      ┌──────────────┐
+│  Express API    │◄────►│  PostgreSQL  │      │    Redis     │
+│    Server       │      │   Database   │      │    Cache     │
+└────────┬────────┘      └──────────────┘      └──────────────┘
+         │ WebSocket
+         ▼
+┌─────────────────┐      ┌──────────────┐
+│   Socket.io     │      │   Python     │
+│   Real-time     │      │  ML Engine   │
+└─────────────────┘      └──────────────┘
+         │
+         ▼
+┌─────────────────┐      ┌──────────────┐
+│  Discord Bot    │      │  Forex APIs  │
+│   (optional)    │      │ (Alpha/12D)  │
+└─────────────────┘      └──────────────┘
 ```
 
-### Technology Stack
+---
 
-#### Backend (Node.js)
-- **Framework**: Express.js
-- **Database**: PostgreSQL with Sequelize ORM
-- **Cache**: Redis
-- **Authentication**: JWT with refresh tokens
-- **Real-time**: Socket.io
-- **Security**: Helmet, CORS, Rate limiting
+## 🛠️ Tech Stack
+
+### Backend
+- **Runtime**: Node.js 18+
+- **Framework**: Express.js 4.18
+- **Database**: PostgreSQL 14+ (Sequelize ORM)
+- **Cache**: Redis 4.0
+- **Real-time**: Socket.io 4.0
+- **Auth**: JWT (jsonwebtoken)
 - **Validation**: Joi
+- **Security**: Helmet, bcrypt, rate-limit
+- **Testing**: Jest, Supertest
 - **Logging**: Winston
 
-#### Frontend (React)
-- **Framework**: React 18+ with Vite
-- **Routing**: React Router DOM
-- **Styling**: Tailwind CSS
-- **Charts**: Chart.js
-- **Real-time**: Socket.io client
-- **HTTP Client**: Axios
+### Frontend
+- **Framework**: React 18.2
+- **Build**: Vite 4.0
+- **Routing**: React Router 6
+- **Styling**: TailwindCSS 3.0
+- **Charts**: Chart.js 4.0
+- **HTTP**: Axios
+- **Real-time**: Socket.io-client
 
-#### ML Engine (Python)
-- **Framework**: FastAPI
-- **ML Libraries**: TensorFlow, scikit-learn
-- **Data Processing**: Pandas, NumPy
-- **Cache**: Redis integration
+### ML Engine
+- **Language**: Python 3.10+
+- **ML**: TensorFlow / scikit-learn
+- **API**: FastAPI
+- **Data**: Pandas, NumPy
 
-#### Discord Bot
-- **Framework**: Discord.js
-- **Features**: Trading signals, market alerts
-- **Rate limiting**: 1 notification per user per minute
+---
 
-### Key Features
-
-#### Trading Intelligence
-- AI-powered signal generation
-- Multiple timeframe analysis
-- Risk assessment and management
-- Technical indicator integration
-- Pattern recognition
-
-#### User Experience
-- Real-time market data
-- Customizable notifications
-- Trading performance tracking
-- Risk preference settings
-- Multi-format data export
-
-#### Security & Performance
-- JWT authentication with refresh tokens
-- Rate limiting and input validation
-- Encrypted password storage (bcrypt)
-- Redis caching for optimal performance
-- Comprehensive error handling
-
-## Quick Start
+## 🚀 Getting Started
 
 ### Prerequisites
-- Node.js 18+
-- Python 3.9+
-- Docker & Docker Compose
-- PostgreSQL 15+
-- Redis 7+
 
-### Installation
+- Node.js 18.0+
+- PostgreSQL 14+
+- Redis 4.0+
+- Python 3.10+ (optional, for ML)
 
-1. **Clone the repository**
+### Quick Start
+
+1. **Clone Repository**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/yourusername/AIFX_v2.git
    cd AIFX_v2
    ```
 
-2. **Setup environment variables**
+2. **Setup Backend**
    ```bash
+   cd backend
+   npm install
    cp .env.example .env
    # Edit .env with your configuration
    ```
 
-3. **Start infrastructure services**
+3. **Create Database**
    ```bash
-   docker-compose up -d postgres redis
+   # PostgreSQL
+   sudo -u postgres psql -c "CREATE DATABASE aifx_v2_dev;"
+
+   # Run migrations
+   npm run migrate
+
+   # Seed demo data (optional)
+   npm run seed
    ```
 
-4. **Setup backend**
+4. **Setup Frontend**
    ```bash
-   cd backend
+   cd ../frontend
    npm install
-   npm run dev
+   cp .env.example .env
    ```
 
-5. **Setup frontend**
+5. **Start Services**
    ```bash
-   cd frontend
-   npm install
-   npm run dev
+   # Terminal 1 - Backend
+   cd backend && npm run dev
+
+   # Terminal 2 - Frontend
+   cd frontend && npm run dev
    ```
 
-6. **Setup ML engine**
-   ```bash
-   cd ml_engine
-   pip install -r requirements.txt
-   python main.py
-   ```
+6. **Access Application**
+   - Frontend: http://localhost:5173
+   - Backend API: http://localhost:3000
+   - API Docs: `backend/docs/API.md`
 
-7. **Setup Discord bot**
-   ```bash
-   cd discord_bot
-   npm install
-   npm start
-   ```
+### Demo Accounts
 
-### Environment Configuration
-
-Required environment variables (see `.env.example`):
-
-#### Core Settings
-- `NODE_ENV`: Application environment
-- `PORT`: Backend server port
-- `DATABASE_URL`: PostgreSQL connection string
-- `REDIS_URL`: Redis connection string
-
-#### Authentication
-- `JWT_SECRET`: JWT signing secret
-- `JWT_REFRESH_SECRET`: Refresh token secret
-
-#### External APIs
-- `ALPHA_VANTAGE_KEY`: Primary forex data source
-- `TWELVE_DATA_KEY`: Fallback forex data source
-- `DISCORD_BOT_TOKEN`: Discord bot authentication
-
-#### ML Integration
-- `ML_API_URL`: ML engine endpoint
-
-## API Architecture
-
-### Core Endpoints
 ```
-GET  /api/v1/auth/login          # User authentication
-POST /api/v1/auth/register       # User registration
-GET  /api/v1/signals             # Trading signals
-GET  /api/v1/market/:pair        # Market data
-POST /api/v1/preferences         # User preferences
-GET  /api/v1/analytics           # Performance analytics
+Email: john@example.com
+Password: password123
+
+Email: sarah@example.com
+Password: trader2023
 ```
 
-### Response Format
+---
+
+## 📚 API Documentation
+
+Full documentation: [`backend/docs/API.md`](backend/docs/API.md)
+
+**Base URL**: `http://localhost:3000/api/v1`
+
+**Authentication**: JWT Bearer token in header
+
+### Key Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/auth/register` | Register new user |
+| POST | `/auth/login` | Login and get tokens |
+| GET | `/trading/signal/:pair` | Get trading signal |
+| GET | `/trading/signals` | List all signals |
+| GET | `/market/price/:pair` | Get real-time price |
+| GET | `/market/overview` | Market overview |
+| GET | `/preferences` | Get user preferences |
+| GET | `/notifications` | Get notifications |
+
+### WebSocket Events
+
 ```javascript
-{
-  success: boolean,
-  data: object | array | null,
-  error: string | null,
-  timestamp: ISO8601
-}
+socket.on('trading:signal', callback);
+socket.on('price:EUR/USD', callback);
+socket.on('market:update', callback);
+socket.on('notification', callback);
 ```
 
-## Database Schema
+---
 
-### Core Tables
-- `users`: User accounts and authentication
-- `user_preferences`: Trading preferences and settings
-- `trading_signals`: Generated trading signals
-- `market_data`: Cached forex data
-- `notifications`: Discord notification logs
-- `analytics`: Performance tracking
+## 🔐 Environment Variables
 
-## Performance Targets
+### Backend
 
-- API response time: < 200ms (p95)
-- Database query time: < 50ms (p95)
-- ML prediction time: < 1000ms
-- WebSocket latency: < 100ms
-- Cache hit rate: > 80%
-- Error rate: < 1%
-
-## Security Features
-
-- JWT authentication with refresh tokens
-- Password hashing (bcrypt, 12 rounds)
-- Rate limiting (100 requests per 15 minutes)
-- Input validation (Joi schemas)
-- SQL injection prevention (parameterized queries)
-- CORS configuration
-- Helmet security headers
-
-## Development Workflow
-
-### Branch Strategy
-- `main`: Production-ready code
-- `develop`: Integration branch
-- `feature/*`: New features
-- `bugfix/*`: Bug fixes
-- `hotfix/*`: Critical fixes
-
-### Commit Convention
-```
-type(scope): description
-
-Types: feat, fix, docs, style, refactor, test, chore
-Example: feat(signals): add ML confidence scoring
+```bash
+NODE_ENV=development
+PORT=3000
+DATABASE_URL=postgresql://user:pass@localhost:5432/aifx_v2_dev
+REDIS_URL=redis://localhost:6379
+JWT_SECRET=your-secret
+JWT_REFRESH_SECRET=your-refresh-secret
+ALPHA_VANTAGE_KEY=your-api-key
+TWELVE_DATA_KEY=your-api-key
+ML_API_URL=http://localhost:8000
 ```
 
-### Testing
-- Unit tests: Jest (Backend), Vitest (Frontend)
-- Integration tests: Supertest
-- Coverage target: > 70%
+### Frontend
 
-## Deployment
+```bash
+VITE_API_URL=http://localhost:3000/api/v1
+VITE_SOCKET_URL=http://localhost:3000
+```
+
+---
+
+## 🧪 Testing
+
+### Run Tests
+
+```bash
+cd backend
+
+# All tests
+npm test
+
+# With coverage
+npm run test:coverage
+
+# Watch mode
+npm run test:watch
+
+# Specific test
+npm test -- auth.test.js
+```
+
+### Test Files
+
+```
+tests/
+├── unit/
+│   ├── auth.test.js              # Authentication tests
+│   ├── forexService.test.js      # Forex service tests
+│   └── tradingSignals.test.js    # Signal generation tests
+└── integration/
+    └── api.test.js               # API endpoint tests
+```
+
+### Coverage Requirements
+
+- Branches: >70%
+- Functions: >70%
+- Lines: >70%
+- Statements: >70%
+
+---
+
+## 🚢 Deployment
 
 ### Production Checklist
-- [ ] Environment variables configured
-- [ ] Database migrations applied
-- [ ] Redis cache configured
-- [ ] ML models deployed
-- [ ] Discord bot online
-- [ ] SSL certificates valid
-- [ ] Monitoring configured
-- [ ] Backup strategy implemented
 
-### Infrastructure
-- Docker containerization
-- PostgreSQL for persistence
-- Redis for caching
-- Load balancing ready
-- Horizontal scaling support
+- [ ] Set `NODE_ENV=production`
+- [ ] Configure strong JWT secrets
+- [ ] Setup SSL certificates
+- [ ] Configure CORS for your domain
+- [ ] Run database migrations
+- [ ] Configure Redis persistence
+- [ ] Setup monitoring
+- [ ] Configure backups
+- [ ] Run `npm audit`
 
-## Monitoring & Logging
+### Docker Deployment
 
-### Metrics
-- Application performance (response times)
-- Database performance (query times)
-- Cache hit rates
-- Error rates and types
-- User activity patterns
+```bash
+docker-compose build
+docker-compose up -d
+```
 
-### Logging
-- Structured logging (Winston)
-- Log levels: error, warn, info, debug
-- Centralized log collection
-- Real-time error alerting
+### Recommended Hosting
 
-## Contributing
+- **Backend**: Heroku, DigitalOcean, AWS
+- **Database**: AWS RDS, DigitalOcean Managed DB
+- **Redis**: Redis Cloud, AWS ElastiCache
+- **Frontend**: Vercel, Netlify, Cloudflare Pages
 
-1. Follow the development guidelines in `CLAUDE.md`
-2. Ensure all tests pass
-3. Maintain code coverage above 70%
-4. Update documentation for new features
-5. Follow the commit message convention
+---
 
-## Support
+## 📁 Project Structure
 
-For questions and support:
-- Check the documentation in `CLAUDE.md`
-- Review the API documentation
-- Contact the development team
+```
+AIFX_v2/
+├── backend/                    # Node.js API
+│   ├── src/
+│   │   ├── config/            # Configuration
+│   │   ├── controllers/       # Route controllers
+│   │   ├── middleware/        # Express middleware
+│   │   ├── models/            # Sequelize models
+│   │   ├── routes/            # API routes
+│   │   ├── services/          # Business logic
+│   │   └── utils/             # Utilities
+│   ├── database/
+│   │   ├── migrations/        # DB migrations
+│   │   ├── seeders/           # Seed data
+│   │   └── config/            # DB config
+│   ├── tests/                 # Jest tests
+│   ├── docs/                  # Documentation
+│   └── package.json
+├── frontend/                   # React app
+│   ├── src/
+│   │   ├── components/        # React components
+│   │   ├── services/          # API client
+│   │   └── App.jsx
+│   └── package.json
+├── ml_engine/                  # Python ML
+├── discord_bot/                # Discord bot
+└── README.md
+```
 
-## License
+---
 
-MIT License - see LICENSE file for details.
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) file
+
+---
+
+## ⚠️ Disclaimer
+
+**IMPORTANT**: This system provides advisory signals only, not financial advice. Trading forex involves substantial risk. Always conduct your own research and never risk more than you can afford to lose.
+
+---
+
+## 🙏 Acknowledgments
+
+- [Alpha Vantage](https://www.alphavantage.co/) - Forex data
+- [Twelve Data](https://twelvedata.com/) - Market data
+- Open source community
+
+---
+
+<div align="center">
+
+**Made with ❤️ by the AIFX Team**
+
+[API Docs](backend/docs/API.md) • [Report Issue](https://github.com/yourusername/AIFX_v2/issues)
+
+</div>

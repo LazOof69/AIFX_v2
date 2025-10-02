@@ -28,9 +28,10 @@ const startServer = async () => {
     }
 
     // Sync database models (only in development)
-    if (process.env.NODE_ENV === 'development') {
-      await syncDatabase(false, true); // alter: true for development
-    }
+    // Disabled - use migrations instead
+    // if (process.env.NODE_ENV === 'development') {
+    //   await syncDatabase(false, true); // alter: true for development
+    // }
 
     // Import models to ensure relationships are established
     require('./models');

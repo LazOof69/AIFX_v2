@@ -1,0 +1,177 @@
+# AIFX_v2 ML Engine Configuration
+
+# Server Configuration
+server:
+  host: "0.0.0.0"
+  port: 8000
+  reload: true
+  workers: 1
+  log_level: "info"
+
+# Model Configuration
+model:
+  # LSTM Architecture
+  lstm:
+    units: [128, 64, 32]  # Number of units in each LSTM layer
+    dropout: 0.2
+    recurrent_dropout: 0.1
+    return_sequences: true
+    activation: "tanh"
+
+  # Dense layers after LSTM
+  dense:
+    units: [16, 8]
+    activation: "relu"
+    dropout: 0.2
+
+  # Output layer
+  output:
+    units: 1
+    activation: "linear"
+
+  # Training parameters
+  training:
+    epochs: 100
+    batch_size: 32
+    validation_split: 0.2
+    early_stopping_patience: 10
+    learning_rate: 0.001
+    optimizer: "adam"
+    loss: "mean_squared_error"
+    metrics: ["mae", "mse"]
+
+  # Model versioning
+  version: "1.0.0"
+  model_dir: "./saved_models"
+  checkpoint_dir: "./checkpoints"
+
+# Data Processing Configuration
+data:
+  # Time series parameters
+  sequence_length: 60  # Number of time steps to look back
+  features: ["open", "high", "low", "close", "volume"]
+  target: "close"
+
+  # Train/test split
+  train_size: 0.8
+  test_size: 0.2
+
+  # Scaling
+  scaler: "minmax"  # Options: minmax, standard, robust
+  feature_range: [0, 1]
+
+  # Data validation
+  min_data_points: 100
+  max_missing_ratio: 0.1
+
+# Prediction Configuration
+prediction:
+  # Confidence thresholds
+  confidence:
+    high: 0.85
+    medium: 0.70
+    low: 0.50
+
+  # Prediction horizons (in time steps)
+  horizons:
+    short: 1
+    medium: 5
+    long: 10
+
+  # Signal generation
+  signal_threshold: 0.02  # 2% price change threshold
+
+  # Factor weights
+  factor_weights:
+    technical: 0.4
+    sentiment: 0.3
+    pattern: 0.3
+
+# Cache Configuration
+cache:
+  enabled: true
+  ttl: 300  # Time to live in seconds (5 minutes)
+  max_size: 1000
+  redis_url: "redis://localhost:6379"
+  redis_db: 1
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "./logs/ml_engine.log"
+  max_bytes: 10485760  # 10MB
+  backup_count: 5
+
+# API Configuration
+api:
+  title: "AIFX_v2 ML Engine API"
+  description: "Machine Learning API for forex price prediction"
+  version: "1.0.0"
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://localhost:5173"
+
+  # Rate limiting
+  rate_limit:
+    enabled: true
+    requests_per_minute: 60
+
+  # Request timeout
+  timeout: 30  # seconds
+
+# Model Performance Monitoring
+monitoring:
+  enabled: true
+  metrics_dir: "./metrics"
+
+  # Performance thresholds
+  thresholds:
+    min_accuracy: 0.60
+    max_mae: 0.05
+    max_mse: 0.01
+
+  # Retraining triggers
+  retrain:
+    auto: true
+    performance_degradation_threshold: 0.15
+    max_days_without_training: 7
+
+# Feature Engineering
+features:
+  technical_indicators:
+    - name: "sma"
+      periods: [20, 50, 200]
+    - name: "ema"
+      periods: [12, 26]
+    - name: "rsi"
+      period: 14
+    - name: "macd"
+      fast: 12
+      slow: 26
+      signal: 9
+    - name: "bollinger_bands"
+      period: 20
+      std: 2
+
+  # Lag features
+  lags: [1, 2, 3, 5, 10]
+
+  # Rolling statistics
+  rolling_windows: [5, 10, 20]
+  rolling_stats: ["mean", "std", "min", "max"]
+
+# Environment
+environment: "development"  # Options: development, staging, production
+
+# Security
+security:
+  api_key_required: false
+  allowed_ips: []  # Empty list means all IPs allowed
+
+# Backup Configuration
+backup:
+  enabled: true
+  frequency: "daily"  # Options: hourly, daily, weekly
+  retention_days: 30
+  backup_dir: "./backups"

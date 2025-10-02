@@ -2,7 +2,32 @@
   "permissions": {
     "allow": [
       "Bash(mkdir:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(npm install:*)",
+      "Bash(cat:*)",
+      "Read(//mnt/c/Users/butte/OneDrive/桌面/**)",
+      "Bash(cd:*)",
+      "Bash(chmod:*)",
+      "Bash(npm create:*)",
+      "Bash(npx tailwindcss init:*)",
+      "Bash(npm run migrate:*)",
+      "Bash(npm test)",
+      "Bash(./quick-test.sh:*)",
+      "Bash(npm run dev:*)",
+      "Bash(sudo apt:*)",
+      "Bash(sudo apt install:*)",
+      "Bash(node:*)",
+      "Bash(timeout:*)",
+      "Bash(sudo service:*)",
+      "Bash(pg_isready:*)",
+      "Bash(redis-cli:*)",
+      "Bash(psql:*)",
+      "Bash(createdb:*)",
+      "Bash(npm run seed:*)",
+      "Bash(pkill:*)",
+      "Bash(curl:*)",
+      "Bash(./test-api.sh:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

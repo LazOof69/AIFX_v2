@@ -110,7 +110,7 @@ app.get('/api/v1/health', (req, res) => {
       status: 'healthy',
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV,
-      version: require('../../package.json').version,
+      version: require('../package.json').version,
     },
     error: null,
     timestamp: new Date().toISOString(),
@@ -120,8 +120,9 @@ app.get('/api/v1/health', (req, res) => {
 // API routes
 app.use('/api/v1/auth', require('./routes/auth'));
 app.use('/api/v1/market', require('./routes/market'));
+app.use('/api/v1/trading', require('./routes/trading'));
+app.use('/api/v1/notifications', require('./routes/notifications'));
 // TODO: Add additional route files when created
-// app.use('/api/v1/signals', require('./routes/signals'));
 // app.use('/api/v1/preferences', require('./routes/preferences'));
 // app.use('/api/v1/analytics', require('./routes/analytics'));
 
