@@ -171,6 +171,16 @@ ML_API_URL=http://localhost:8000
 
 ## Git Workflow & GitHub Integration
 
+### **🔐 GitHub Authentication**
+
+**GitHub Personal Access Token (PAT):**
+- PAT is stored in: `~/.git-credentials` (secure file with 600 permissions)
+- Git remote URL is configured with PAT for automatic authentication
+- Use `git push origin main` to push - authentication is automatic
+- PAT is also available in git config credential helper
+
+**IMPORTANT**: Always use the stored PAT to push to GitHub. No manual authentication needed.
+
 ### **🔄 Session-Based Commit Strategy**
 
 **IMPORTANT**: At the end of EVERY Claude Code session where changes were made, you MUST commit and push to GitHub.
