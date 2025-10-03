@@ -2,6 +2,7 @@ const technicalAnalysis = require('./technicalAnalysis');
 const forexService = require('./forexService');
 const logger = require('../utils/logger');
 const { v4: uuidv4 } = require('uuid');
+const axios = require('axios');
 
 /**
  * Trading Signal Service
@@ -40,16 +41,43 @@ class TradingSignalService {
       // Perform technical analysis
       const analysis = technicalAnalysis.getComprehensiveAnalysis(marketData, userPreferences);
 
-      // Calculate confidence score
-      const confidence = this.calculateConfidence(analysis.indicators, userPreferences);
+      // Get ML prediction if available
+      const mlPrediction = await this.getMLPrediction(pair, timeframe, marketData);
+
+      // Merge ML prediction with technical analysis
+      let finalSignal = analysis.overallSignal;
+      let finalConfidence = this.calculateConfidence(analysis.indicators, userPreferences);
+      let mlEnhanced = false;
+      let factors = {
+        technical: this.calculateTechnicalFactor(analysis.indicators),
+        sentiment: 0.5, // Placeholder for future sentiment analysis
+        pattern: 0.5 // Placeholder for future pattern recognition
+      };
+
+      if (mlPrediction && mlPrediction.prediction) {
+        mlEnhanced = true;
+        // Use ML prediction as primary signal
+        finalSignal = mlPrediction.prediction;
+        // Blend ML confidence with technical confidence
+        finalConfidence = (mlPrediction.confidence * 0.7) + (finalConfidence * 0.3);
+        // Update factors with ML prediction factors
+        if (mlPrediction.factors) {
+          factors = {
+            technical: mlPrediction.factors.technical || factors.technical,
+            sentiment: mlPrediction.factors.sentiment || factors.sentiment,
+            pattern: mlPrediction.factors.pattern || factors.pattern
+          };
+        }
+        logger.info(`ML-enhanced signal for ${pair}: ${finalSignal} (confidence: ${finalConfidence.toFixed(2)})`);
+      }
 
       // Determine signal strength
-      const signalStrength = this.determineSignalStrength(confidence);
+      const signalStrength = this.determineSignalStrength(finalConfidence);
 
       // Calculate risk management parameters
       const riskParams = this.calculateRiskParameters(
         currentPrice,
-        analysis.overallSignal,
+        finalSignal,
         analysis.indicators,
         userPreferences.riskLevel || 5
       );
@@ -63,19 +91,16 @@ class TradingSignalService {
         userId: userId,
         pair: pair,
         timeframe: timeframe,
-        signal: analysis.overallSignal,
-        confidence: parseFloat(confidence.toFixed(2)),
-        factors: {
-          technical: this.calculateTechnicalFactor(analysis.indicators),
-          sentiment: 0.5, // Placeholder for future sentiment analysis
-          pattern: 0.5 // Placeholder for future pattern recognition
-        },
+        signal: finalSignal,
+        confidence: parseFloat(finalConfidence.toFixed(2)),
+        factors: factors,
+        mlEnhanced: mlEnhanced,
         entryPrice: currentPrice,
         stopLoss: riskParams.stopLoss,
         takeProfit: riskParams.takeProfit,
         riskRewardRatio: riskParams.riskRewardRatio,
         positionSize: riskParams.positionSize,
-        source: 'technical_analysis',
+        source: mlEnhanced ? 'ml_enhanced' : 'technical_analysis',
         signalStrength: signalStrength,
         marketCondition: marketCondition,
         technicalData: {
@@ -351,6 +376,54 @@ class TradingSignalService {
    */
   delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Get ML prediction from ML Engine API
+   * @param {string} pair - Currency pair
+   * @param {string} timeframe - Timeframe
+   * @param {Object} marketData - Market data object
+   * @returns {Promise<Object|null>} - ML prediction result or null if ML is disabled/failed
+   */
+  async getMLPrediction(pair, timeframe, marketData) {
+    if (!process.env.ML_API_ENABLED || process.env.ML_API_ENABLED === 'false') {
+      logger.debug('ML API is disabled');
+      return null;
+    }
+
+    try {
+      logger.info(`Requesting ML prediction for ${pair} from ${process.env.ML_API_URL}`);
+
+      // Convert market data to ML API format
+      const mlData = marketData.timeSeries.map(candle => ({
+        timestamp: candle.timestamp || new Date().toISOString(),
+        open: parseFloat(candle.open),
+        high: parseFloat(candle.high),
+        low: parseFloat(candle.low),
+        close: parseFloat(candle.close),
+        volume: parseFloat(candle.volume || 0)
+      }));
+
+      const response = await axios.post(`${process.env.ML_API_URL}/predict`, {
+        pair: pair,
+        timeframe: timeframe,
+        data: mlData,
+        add_indicators: true
+      }, {
+        timeout: 10000 // 10 second timeout
+      });
+
+      if (response.data && response.data.success) {
+        logger.info(`ML prediction received for ${pair}: ${response.data.data.prediction}`);
+        return response.data.data;
+      } else {
+        logger.warn(`ML prediction failed for ${pair}: ${response.data?.error || 'Unknown error'}`);
+        return null;
+      }
+    } catch (error) {
+      logger.error('ML prediction failed:', error.message);
+      return null;
+    }
   }
 
   /**
