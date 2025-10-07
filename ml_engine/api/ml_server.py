@@ -12,6 +12,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 import sys
 import os
+import tensorflow as tf
 
 # Add parent directory to path to import modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -64,7 +65,7 @@ predictor = PricePredictor(config)
 latest_model = predictor.get_latest_model_path()
 if latest_model:
     try:
-        predictor.load_model(latest_model)
+        predictor.load_model(latest_model, preprocessor)
         logger.info(f"Loaded existing model from {latest_model}")
     except Exception as e:
         logger.warning(f"Could not load existing model: {e}")
@@ -291,8 +292,8 @@ async def train_model(request: TrainingRequest, background_tasks: BackgroundTask
         # Evaluate model
         metrics = predictor.evaluate(X_test, y_test)
 
-        # Save the trained model
-        model_path = predictor.save_model()
+        # Save the trained model with fitted scaler
+        model_path = predictor.save_model(preprocessor=preprocessor)
 
         training_result = {
             "pair": request.pair,
@@ -349,10 +350,10 @@ async def get_model_info():
 
     model_info = {
         "version": predictor.model_version,
-        "input_shape": predictor.model.input_shape,
-        "output_shape": predictor.model.output_shape,
-        "total_params": predictor.model.count_params(),
-        "trainable_params": sum([tf.size(w).numpy() for w in predictor.model.trainable_weights]),
+        "input_shape": str(predictor.model.input_shape),
+        "output_shape": str(predictor.model.output_shape),
+        "total_params": int(predictor.model.count_params()),
+        "trainable_params": int(sum([int(tf.size(w).numpy()) for w in predictor.model.trainable_weights])),
         "model_path": predictor.get_latest_model_path()
     }
 

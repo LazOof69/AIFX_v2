@@ -9,6 +9,13 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler, RobustScaler
 from typing import Tuple, List, Dict, Optional, Union
 import logging
 from datetime import datetime
+import joblib
+import os
+import sys
+
+# Add parent directory to path for utils import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.indicators import calculate_all_indicators
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +131,7 @@ class DataPreprocessor:
     def add_technical_indicators(self, data: pd.DataFrame) -> pd.DataFrame:
         """
         Add technical indicators as features
+        Uses the same indicator calculation as training data preparation
 
         Args:
             data: Input DataFrame
@@ -133,43 +141,8 @@ class DataPreprocessor:
         """
         df = data.copy()
 
-        # Simple Moving Averages
-        for period in [5, 10, 20, 50]:
-            df[f'sma_{period}'] = df['close'].rolling(window=period).mean()
-
-        # Exponential Moving Averages
-        for period in [12, 26]:
-            df[f'ema_{period}'] = df['close'].ewm(span=period, adjust=False).mean()
-
-        # RSI (Relative Strength Index)
-        delta = df['close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss
-        df['rsi'] = 100 - (100 / (1 + rs))
-
-        # MACD
-        ema12 = df['close'].ewm(span=12, adjust=False).mean()
-        ema26 = df['close'].ewm(span=26, adjust=False).mean()
-        df['macd'] = ema12 - ema26
-        df['macd_signal'] = df['macd'].ewm(span=9, adjust=False).mean()
-
-        # Bollinger Bands
-        df['bb_middle'] = df['close'].rolling(window=20).mean()
-        bb_std = df['close'].rolling(window=20).std()
-        df['bb_upper'] = df['bb_middle'] + (bb_std * 2)
-        df['bb_lower'] = df['bb_middle'] - (bb_std * 2)
-
-        # Price rate of change
-        df['roc'] = df['close'].pct_change(periods=10) * 100
-
-        # Volume indicators
-        if 'volume' in df.columns:
-            df['volume_sma'] = df['volume'].rolling(window=20).mean()
-            df['volume_ratio'] = df['volume'] / df['volume_sma']
-
-        # Drop NaN values created by indicators
-        df = df.dropna()
+        # Use the same indicator calculation function as training
+        df = calculate_all_indicators(df)
 
         logger.info(f"Added technical indicators: {len(df.columns)} features")
         return df
@@ -329,9 +302,29 @@ class DataPreprocessor:
         if add_indicators:
             df = self.add_technical_indicators(df)
 
-        # Select features
-        feature_cols = [col for col in df.columns if col not in ['timestamp']]
-        df_features = df[feature_cols]
+        # Select only the features used during training (exclude volume and obv)
+        # These are the 28 features that the model was trained on
+        expected_features = [
+            'open', 'high', 'low', 'close',
+            'sma_20', 'sma_50', 'sma_200',
+            'ema_12', 'ema_26',
+            'rsi_14',
+            'macd', 'macd_signal', 'macd_histogram',
+            'bb_upper', 'bb_middle', 'bb_lower', 'bb_width',
+            'atr_14',
+            'stoch_k', 'stoch_d',
+            'momentum_10', 'roc_12',
+            'williams_r',
+            'cci_20',
+            'adx_14',
+            'price_change', 'price_range', 'body_size'
+        ]
+
+        # Select only available expected features
+        available_features = [col for col in expected_features if col in df.columns]
+        df_features = df[available_features]
+
+        logger.info(f"Selected {len(available_features)} features for prediction")
 
         # Scale features (without fitting)
         scaled_features = self.scale_features(df_features, fit=False)
@@ -349,6 +342,42 @@ class DataPreprocessor:
         logger.info(f"Prediction data prepared: X={X.shape}")
 
         return X
+
+    def save_scaler(self, filepath: str):
+        """
+        Save fitted scalers to disk
+
+        Args:
+            filepath: Path to save the scaler file (.pkl)
+        """
+        scaler_data = {
+            'feature_scaler': self.feature_scaler,
+            'target_scaler': self.target_scaler,
+            'scaler_type': self.scaler_type,
+            'feature_range': self.feature_range
+        }
+
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        joblib.dump(scaler_data, filepath)
+        logger.info(f"Scaler saved to {filepath}")
+
+    def load_scaler(self, filepath: str):
+        """
+        Load fitted scalers from disk
+
+        Args:
+            filepath: Path to the scaler file (.pkl)
+        """
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Scaler file not found: {filepath}")
+
+        scaler_data = joblib.load(filepath)
+        self.feature_scaler = scaler_data['feature_scaler']
+        self.target_scaler = scaler_data['target_scaler']
+        self.scaler_type = scaler_data.get('scaler_type', self.scaler_type)
+        self.feature_range = scaler_data.get('feature_range', self.feature_range)
+
+        logger.info(f"Scaler loaded from {filepath}")
 
 
 def load_data_from_dict(data_dict: Dict) -> pd.DataFrame:

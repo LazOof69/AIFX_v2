@@ -10,6 +10,7 @@ from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 from tensorflow.keras.optimizers import Adam
+from sklearn.utils.class_weight import compute_class_weight
 from typing import Dict, Tuple, Optional, List
 import logging
 import os
@@ -171,6 +172,16 @@ class PricePredictor:
         else:
             validation_data = None
 
+        # Calculate class weights to handle imbalanced data
+        unique_classes = np.unique(y_train)
+        class_weights = compute_class_weight(
+            class_weight='balanced',
+            classes=unique_classes,
+            y=y_train
+        )
+        class_weight_dict = dict(enumerate(class_weights))
+        logger.info(f"Class weights: {class_weight_dict}")
+
         # Train the model
         history = self.model.fit(
             X_train,
@@ -180,6 +191,7 @@ class PricePredictor:
             validation_split=validation_split,
             validation_data=validation_data,
             callbacks=callbacks,
+            class_weight=class_weight_dict,
             verbose=verbose
         )
 
@@ -397,12 +409,13 @@ class PricePredictor:
 
         return metrics
 
-    def save_model(self, filepath: Optional[str] = None) -> str:
+    def save_model(self, filepath: Optional[str] = None, preprocessor = None) -> str:
         """
-        Save the trained model
+        Save the trained model and fitted scaler
 
         Args:
             filepath: Path to save the model (optional)
+            preprocessor: DataPreprocessor instance with fitted scaler (optional)
 
         Returns:
             Path where model was saved
@@ -435,14 +448,24 @@ class PricePredictor:
 
         logger.info(f"Model metadata saved to {metadata_path}")
 
+        # Save fitted scaler if preprocessor is provided
+        if preprocessor is not None:
+            scaler_path = filepath.replace('.h5', '_scaler.pkl')
+            try:
+                preprocessor.save_scaler(scaler_path)
+                logger.info(f"Scaler saved to {scaler_path}")
+            except Exception as e:
+                logger.warning(f"Failed to save scaler: {e}")
+
         return filepath
 
-    def load_model(self, filepath: str) -> None:
+    def load_model(self, filepath: str, preprocessor = None) -> None:
         """
-        Load a saved model
+        Load a saved model and fitted scaler
 
         Args:
             filepath: Path to the saved model
+            preprocessor: DataPreprocessor instance to load scaler into (optional)
         """
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"Model file not found: {filepath}")
@@ -457,6 +480,18 @@ class PricePredictor:
                 metadata = json.load(f)
             logger.info(f"Model metadata: {metadata}")
 
+        # Load fitted scaler if available and preprocessor is provided
+        if preprocessor is not None:
+            scaler_path = filepath.replace('.h5', '_scaler.pkl')
+            if os.path.exists(scaler_path):
+                try:
+                    preprocessor.load_scaler(scaler_path)
+                    logger.info(f"Scaler loaded from {scaler_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to load scaler: {e}")
+            else:
+                logger.warning(f"Scaler file not found: {scaler_path}")
+
     def get_latest_model_path(self) -> Optional[str]:
         """
         Get the path to the latest saved model
@@ -469,7 +504,7 @@ class PricePredictor:
 
         model_files = [
             f for f in os.listdir(self.model_dir)
-            if f.endswith('.h5') and f.startswith('price_predictor')
+            if f.endswith('.h5') and (f.startswith('price_predictor') or f.startswith('forex_classifier'))
         ]
 
         if not model_files:
