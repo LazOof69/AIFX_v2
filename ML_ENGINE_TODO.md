@@ -1,7 +1,7 @@
 # ML 引擎任務清單
 
-**最後更新**: 2025-10-08 04:15
-**當前狀態**: 🔄 階段 2 MVP Week 1 完成 - 基本面數據基礎建設完成
+**最後更新**: 2025-10-08 13:10
+**當前狀態**: ✅ 階段 2 MVP Week 1-2 完成 - 經濟日曆 + 特徵工程完成
 
 ---
 
@@ -19,7 +19,7 @@
 - [x] 模型驗證測試通過
 - [x] ML API 部署運行中
 
-### 🔄 **階段 2: 基本面 + 事件整合 (進行中 - Week 1 完成 43.75%)**
+### 🔄 **階段 2: 基本面 + 事件整合 (進行中 - Week 1-2 完成 87.5%)**
 
 #### ✅ **Week 1: 數據基礎建設 (已完成)**
 - [x] **註冊 FRED API key** (e22a48414359e978361612cab3f0e4fd)
@@ -60,20 +60,23 @@
 - Unemployment: 月度數據 (208-239 observations)
 ```
 
-#### 🔄 **Week 1-2: 剩餘任務 (待執行)**
-- [ ] **建立經濟日曆爬蟲** (`collect_economic_calendar.py`)
-  - [ ] Forex Factory 網站爬蟲
-  - [ ] 解析高/中/低影響事件
-  - [ ] 提取 forecast/actual/previous 值
-  - [ ] 保存到 economic_events 表
-  - [ ] 設置定時任務 (每週更新)
-- [ ] **建立基本面特徵工程模組** (`fundamental_features.py`)
-  - [ ] 計算利率差異 (interest_rate_diff)
-  - [ ] GDP 同比增長率
-  - [ ] 通膨差異
-  - [ ] 距下個重大事件天數
-  - [ ] 事件影響分數 (0-1)
-  - [ ] 時間對齊邏輯 (前向填充)
+#### ✅ **Week 1-2: 完成** (2025-10-08)
+- [x] **建立經濟日曆爬蟲** (`collect_economic_calendar.py`) ⭐
+  - [x] 使用 investpy 從 Investing.com 獲取數據
+  - [x] 解析高/中/低影響事件
+  - [x] 提取 forecast/actual/previous 值
+  - [x] 保存到 economic_events 表（21,179 條記錄）
+  - [x] 設置定時任務 (每日 01:00 AM 自動更新)
+  - [x] 日誌輪轉和健康監控腳本
+- [x] **建立基本面特徵工程模組** (`fundamental_features.py`) ⭐
+  - [x] 計算利率差異 (interest_rate_diff)
+  - [x] GDP 同比增長率
+  - [x] 通膨差異
+  - [x] 距下個重大事件天數
+  - [x] 事件影響分數 (0-1)
+  - [x] 時間對齊邏輯 (前向填充)
+  - [x] 支持 EURUSD, GBPUSD, USDJPY
+  - [x] 測試驗證通過
 
 #### ⏸️ **Week 2: 模型開發 (待執行)**
 - [ ] **建立多輸入 LSTM 模型 v2.0** (`multi_input_predictor.py`)
