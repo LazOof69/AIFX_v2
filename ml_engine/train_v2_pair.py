@@ -264,7 +264,9 @@ def main(pair='EURUSD', epochs=None, batch_size=None, prepare_data=False):
 
     # Save model
     logger.info("\nSaving model...")
-    model_path = predictor.save_model(pair_name=pair)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    model_path = f'./saved_models_v2/{pair}_v2_{timestamp}.h5'
+    predictor.save_model(filepath=model_path, save_history=True)
     logger.info(f"✓ Model saved: {model_path}")
 
     # Save training metadata
@@ -272,7 +274,7 @@ def main(pair='EURUSD', epochs=None, batch_size=None, prepare_data=False):
         'pair': pair,
         'model_version': '2.0.0',
         'training_date': datetime.now().isoformat(),
-        'epochs_trained': len(history.history['loss']),
+        'epochs_trained': len(history['loss']),
         'config': config['model'],
         'data_shapes': {
             'technical': list(X_technical_train.shape),
@@ -281,8 +283,8 @@ def main(pair='EURUSD', epochs=None, batch_size=None, prepare_data=False):
             'target': list(y_train.shape)
         },
         'metrics': metrics,
-        'best_epoch': int(np.argmin(history.history['val_loss'])) + 1,
-        'best_val_loss': float(np.min(history.history['val_loss']))
+        'best_epoch': int(np.argmin(history['val_loss'])) + 1,
+        'best_val_loss': float(np.min(history['val_loss']))
     }
 
     metadata_path = model_path.replace('.h5', '_metadata.json')

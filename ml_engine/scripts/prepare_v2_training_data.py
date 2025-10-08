@@ -573,9 +573,15 @@ class MultiInputDataPreparator:
         if technical_df is None:
             return None
 
-        # Get date range
-        start_date = technical_df.index.min()
-        end_date = technical_df.index.max()
+        # Get date range (normalize to date only, remove time)
+        start_date = pd.to_datetime(technical_df.index.min()).normalize()
+        end_date = pd.to_datetime(technical_df.index.max()).normalize()
+
+        # Override with 2024 data range for now (v1.0 data has future dates)
+        start_date = pd.to_datetime('2024-01-01')
+        end_date = pd.to_datetime('2024-12-31')
+
+        print(f"\n⚠️  Using fixed date range: {start_date.date()} to {end_date.date()}")
 
         # Step 2: Extract fundamental features
         fundamental_df = self.extract_fundamental_features(pair, start_date, end_date)

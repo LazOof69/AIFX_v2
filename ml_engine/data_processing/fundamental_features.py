@@ -548,7 +548,11 @@ class FundamentalFeatureEngineer:
         # 1. Interest rate differential
         try:
             rate_diff = self.calculate_interest_rate_diff(pair, start_date, end_date)
-            base_df = base_df.merge(rate_diff, on='date', how='left')
+            # Align to daily frequency with forward fill
+            rate_diff_daily = self.align_features_with_timeseries(
+                daily_dates, rate_diff, 'date', 'ffill'
+            )
+            base_df = base_df.merge(rate_diff_daily, on='date', how='left')
         except Exception as e:
             logger.warning(f"Failed to calculate interest rate diff: {e}")
 
