@@ -46,6 +46,11 @@ const User = sequelize.define('User', {
     defaultValue: true,
     field: 'is_active',
   },
+  isVerified: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: true,
+    field: 'is_verified',
+  },
   lastLogin: {
     type: DataTypes.DATE,
     allowNull: true,

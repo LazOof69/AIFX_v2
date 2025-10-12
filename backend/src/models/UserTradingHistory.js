@@ -26,10 +26,13 @@ const UserTradingHistory = sequelize.define('UserTradingHistory', {
   },
   signalId: {
     type: DataTypes.UUID,
-    allowNull: false,
+    allowNull: true, // Allow null for manual positions without signals
     references: {
       model: 'trading_signals',
       key: 'id',
+    },
+    validate: {
+      // Explicitly allow null values
     },
   },
   pair: {
@@ -118,6 +121,7 @@ const UserTradingHistory = sequelize.define('UserTradingHistory', {
 }, {
   tableName: 'user_trading_history',
   timestamps: true,
+  paranoid: false, // Disable soft deletes (no deleted_at column)
   underscored: true,
   indexes: [
     {

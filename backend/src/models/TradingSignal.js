@@ -193,6 +193,7 @@ const TradingSignal = sequelize.define('TradingSignal', {
   },
 }, {
   tableName: 'trading_signals',
+  paranoid: false, // Disable soft deletes (no deleted_at column)
   indexes: [
     {
       fields: ['userId'],

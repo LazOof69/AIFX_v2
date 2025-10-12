@@ -53,9 +53,9 @@ class PositionService {
       }
 
       // Create position record
-      const position = await UserTradingHistory.create({
+      // Build data object, only include signalId if it exists
+      const positionDataToCreate = {
         userId,
-        signalId: signalId || null,
         pair,
         action,
         entryPrice,
@@ -65,7 +65,14 @@ class PositionService {
         notes: notes || null,
         status: 'open',
         openedAt: new Date(),
-      });
+      };
+
+      // Only add signalId if provided (for signal-based positions)
+      if (signalId) {
+        positionDataToCreate.signalId = signalId;
+      }
+
+      const position = await UserTradingHistory.create(positionDataToCreate);
 
       logger.info(`Position ${position.id} opened successfully for user ${userId}`);
 
@@ -301,7 +308,7 @@ class PositionService {
           {
             model: TradingSignal,
             as: 'signal',
-            attributes: ['id', 'pair', 'signal', 'confidence', 'entryPrice', 'stopLoss', 'takeProfit'],
+            attributes: ['id', 'pair', 'action', 'confidence', 'entryPrice', 'stopLoss', 'takeProfit'],
           },
         ],
       });
