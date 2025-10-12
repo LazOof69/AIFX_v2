@@ -29,18 +29,24 @@ from utils.indicators import calculate_all_indicators
 class MultiInputDataPreparator:
     """Prepares multi-input training data for v2.0 LSTM model"""
 
-    def __init__(self, db_config=None):
+    def __init__(self, db_config=None, output_dir=None):
         """
         Initialize data preparator
 
         Args:
             db_config: Database configuration dict (optional)
+            output_dir: Custom output directory for training data (optional)
         """
         self.data_dir = Path(__file__).parent.parent / 'data'
         self.raw_dir = self.data_dir / 'raw'
         self.processed_dir = self.data_dir / 'processed'
         self.training_dir_v1 = self.data_dir / 'training'
-        self.training_dir_v2 = self.data_dir / 'training_v2'
+
+        # Set output directory
+        if output_dir:
+            self.training_dir_v2 = Path(output_dir)
+        else:
+            self.training_dir_v2 = self.data_dir / 'training_v2'
 
         # Ensure v2 training directory exists
         self.training_dir_v2.mkdir(parents=True, exist_ok=True)
@@ -57,12 +63,13 @@ class MultiInputDataPreparator:
 
         self.fundamental_engineer = FundamentalFeatureEngineer(db_config)
 
-    def load_v1_technical_data(self, pair='EURUSD'):
+    def load_v1_technical_data(self, pair='EURUSD', use_extended=False):
         """
         Load technical indicator data from v1.0
 
         Args:
             pair: Currency pair (e.g., 'EURUSD')
+            use_extended: Use extended 2020-2024 dataset if available
 
         Returns:
             pandas.DataFrame: DataFrame with OHLC and technical indicators
@@ -70,6 +77,16 @@ class MultiInputDataPreparator:
         print(f"\n{'='*60}")
         print(f"Loading v1.0 Technical Data for {pair}")
         print(f"{'='*60}")
+
+        # Try extended dataset first if requested
+        if use_extended:
+            extended_file = self.processed_dir / f'{pair}_processed_2020_2024.csv'
+            if extended_file.exists():
+                df = pd.read_csv(extended_file, index_col=0, parse_dates=True)
+                print(f"✓ Loaded {len(df)} rows from {extended_file}")
+                print(f"  Date range: {df.index.min()} to {df.index.max()}")
+                print(f"  Columns: {len(df.columns)}")
+                return df
 
         # Load processed data (contains OHLC + indicators)
         processed_file = self.processed_dir / f'{pair}_processed.csv'
@@ -552,7 +569,8 @@ class MultiInputDataPreparator:
         print(f"  Training samples: {metadata['samples']['train']}")
         print(f"  Testing samples: {metadata['samples']['test']}")
 
-    def prepare_pair(self, pair='EURUSD', sequence_length=60, test_split=0.2):
+    def prepare_pair(self, pair='EURUSD', sequence_length=60, test_split=0.2,
+                     start_date=None, end_date=None):
         """
         Prepare v2.0 training data for a currency pair
 
@@ -560,6 +578,8 @@ class MultiInputDataPreparator:
             pair: Currency pair (e.g., 'EURUSD')
             sequence_length: LSTM sequence length
             test_split: Test data proportion
+            start_date: Start date for data (default: 2024-01-01)
+            end_date: End date for data (default: 2024-12-31)
 
         Returns:
             dict: Training data dictionary
@@ -568,20 +588,30 @@ class MultiInputDataPreparator:
         print(f"PREPARING v2.0 TRAINING DATA FOR {pair}")
         print(f"{'='*70}")
 
+        # Determine if using extended dataset (2020-2024)
+        use_extended = False
+        if start_date:
+            start_year = pd.to_datetime(start_date).year
+            if start_year <= 2020:
+                use_extended = True
+
         # Step 1: Load v1.0 technical data
-        technical_df = self.load_v1_technical_data(pair)
+        technical_df = self.load_v1_technical_data(pair, use_extended=use_extended)
         if technical_df is None:
             return None
 
         # Get date range (normalize to date only, remove time)
-        start_date = pd.to_datetime(technical_df.index.min()).normalize()
-        end_date = pd.to_datetime(technical_df.index.max()).normalize()
+        if start_date is None:
+            start_date = pd.to_datetime('2024-01-01')
+        else:
+            start_date = pd.to_datetime(start_date).normalize()
 
-        # Override with 2024 data range for now (v1.0 data has future dates)
-        start_date = pd.to_datetime('2024-01-01')
-        end_date = pd.to_datetime('2024-12-31')
+        if end_date is None:
+            end_date = pd.to_datetime('2024-12-31')
+        else:
+            end_date = pd.to_datetime(end_date).normalize()
 
-        print(f"\n⚠️  Using fixed date range: {start_date.date()} to {end_date.date()}")
+        print(f"\n📅 Using date range: {start_date.date()} to {end_date.date()}")
 
         # Step 2: Extract fundamental features
         fundamental_df = self.extract_fundamental_features(pair, start_date, end_date)
@@ -629,6 +659,12 @@ def main():
                         help='LSTM sequence length (default: 60)')
     parser.add_argument('--test-split', type=float, default=0.2,
                         help='Test data split ratio (default: 0.2)')
+    parser.add_argument('--start-date', type=str, default=None,
+                        help='Start date (YYYY-MM-DD, default: 2024-01-01)')
+    parser.add_argument('--end-date', type=str, default=None,
+                        help='End date (YYYY-MM-DD, default: 2024-12-31)')
+    parser.add_argument('--output-dir', type=str, default=None,
+                        help='Output directory for training data (default: data/training_v2)')
 
     args = parser.parse_args()
 
@@ -639,13 +675,15 @@ def main():
     print()
 
     # Initialize preparator
-    preparator = MultiInputDataPreparator()
+    preparator = MultiInputDataPreparator(output_dir=args.output_dir)
 
     # Prepare data
     training_data = preparator.prepare_pair(
         pair=args.pair,
         sequence_length=args.sequence_length,
-        test_split=args.test_split
+        test_split=args.test_split,
+        start_date=args.start_date,
+        end_date=args.end_date
     )
 
     if training_data:

@@ -36,18 +36,23 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def load_v2_training_data(pair: str, data_dir: Path):
+def load_v2_training_data(pair: str, data_dir: Path = None):
     """
     Load v2.0 multi-input training data
 
     Args:
         pair: Currency pair (e.g., 'EURUSD')
-        data_dir: Directory containing training data
+        data_dir: Directory containing training data (default: data/training_v2)
 
     Returns:
         Tuple of (X_technical_train, X_fundamental_train, X_event_train, y_train,
                   X_technical_test, X_fundamental_test, X_event_test, y_test)
     """
+    if data_dir is None:
+        data_dir = Path(__file__).parent / 'data' / 'training_v2'
+    else:
+        data_dir = Path(data_dir)
+
     logger.info(f"Loading {pair} v2.0 training data from {data_dir}")
 
     # Load technical indicators
@@ -148,7 +153,7 @@ def evaluate_model(predictor, X_test_list, y_test):
     return metrics
 
 
-def main(pair='EURUSD', epochs=None, batch_size=None, prepare_data=False):
+def main(pair='EURUSD', epochs=None, batch_size=None, prepare_data=False, data_dir=None):
     """
     Main training function for v2.0 multi-input models
 
@@ -157,6 +162,7 @@ def main(pair='EURUSD', epochs=None, batch_size=None, prepare_data=False):
         epochs: Number of training epochs (override config)
         batch_size: Batch size (override config)
         prepare_data: Whether to prepare training data first
+        data_dir: Directory containing training data (default: data/training_v2)
     """
     print("=" * 80)
     print(f"Multi-Input LSTM v2.0 Training - {pair}")
@@ -188,7 +194,10 @@ def main(pair='EURUSD', epochs=None, batch_size=None, prepare_data=False):
     print(f"  - Early Stopping Patience: {config['model']['training']['early_stopping_patience']}")
 
     # Data directory
-    data_dir = Path(__file__).parent / 'data' / 'training_v2'
+    if data_dir is None:
+        data_dir = Path(__file__).parent / 'data' / 'training_v2'
+    else:
+        data_dir = Path(data_dir)
 
     # Prepare data if requested
     if prepare_data:
@@ -339,6 +348,12 @@ if __name__ == '__main__':
         action='store_true',
         help='Prepare training data before training'
     )
+    parser.add_argument(
+        '--data-dir',
+        type=str,
+        default=None,
+        help='Directory containing training data (default: data/training_v2)'
+    )
 
     args = parser.parse_args()
 
@@ -347,7 +362,8 @@ if __name__ == '__main__':
             pair=args.pair,
             epochs=args.epochs,
             batch_size=args.batch_size,
-            prepare_data=args.prepare_data
+            prepare_data=args.prepare_data,
+            data_dir=args.data_dir
         )
 
         print(f"\n✅ SUCCESS: {args.pair} v2.0 model trained and saved")
