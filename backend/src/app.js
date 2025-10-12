@@ -124,6 +124,7 @@ app.use('/api/v1/auth', require('./routes/auth'));
 app.use('/api/v1/market', require('./routes/market'));
 app.use('/api/v1/trading', require('./routes/trading'));
 app.use('/api/v1/notifications', require('./routes/notifications'));
+app.use('/api/v1/positions', require('./routes/positions')); // Phase 3: Position management
 // TODO: Add additional route files when created
 // app.use('/api/v1/preferences', require('./routes/preferences'));
 // app.use('/api/v1/analytics', require('./routes/analytics'));
