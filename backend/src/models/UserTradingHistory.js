@@ -284,7 +284,7 @@ UserTradingHistory.getUserStatistics = async function(userId, options = {}) {
     bestTrade: pnlStats?.bestTrade ? parseFloat(pnlStats.bestTrade) : 0,
     worstTrade: pnlStats?.worstTrade ? parseFloat(pnlStats.worstTrade) : 0,
     averageHoldingDuration: durationStats[0]?.avg_duration_minutes
-      ? parseFloat(durationStats[0].avg_duration_minutes.toFixed(2))
+      ? parseFloat(parseFloat(durationStats[0].avg_duration_minutes).toFixed(2))
       : 0,
   };
 };

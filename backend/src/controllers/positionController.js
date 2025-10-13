@@ -75,15 +75,23 @@ exports.closePosition = async (req, res) => {
       });
     }
 
-    const position = await positionService.closePosition(positionId, {
+    const result = await positionService.closePosition(positionId, {
       exitPrice,
       exitPercentage: exitPercentage || 100,
       notes,
     });
 
+    // Handle partial close response (returns {closedPosition, remainingPosition})
+    // vs full close response (returns position object)
+    const responseData = result.closedPosition ? {
+      closedPosition: result.closedPosition,
+      remainingPosition: result.remainingPosition,
+      isPartialClose: true
+    } : result;
+
     res.status(200).json({
       success: true,
-      data: position,
+      data: responseData,
       error: null,
       timestamp: new Date().toISOString(),
     });

@@ -484,7 +484,7 @@ class PositionService {
       pnlPips = (position.entryPrice - exitPrice) * pipMultiplier;
     }
 
-    const pnlPercentage = ((exitPrice - position.entryPrice) / position.entryPrice) * 100;
+    let pnlPercentage = ((exitPrice - position.entryPrice) / position.entryPrice) * 100;
     if (position.action === 'sell') {
       // Invert percentage for sell positions
       pnlPercentage = -pnlPercentage;
