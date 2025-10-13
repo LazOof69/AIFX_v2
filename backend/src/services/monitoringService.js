@@ -1,6 +1,9 @@
 const logger = require('../utils/logger');
 const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
+const { PositionMonitoring, UserTradingHistory, UserPreferences } = require('../models');
+const forexService = require('./forexService');
+const positionService = require('./positionService');
 
 /**
  * Position Monitoring Service
@@ -57,22 +60,85 @@ class MonitoringService {
    * Monitor all open positions (called by monitoring loop)
    */
   async monitorAllPositions() {
+    const startTime = Date.now();
+
     try {
-      logger.info('Monitoring cycle started');
+      logger.info('📊 Monitoring cycle started');
 
-      // TODO: Get all open positions from positionService
-      // TODO: Process positions in parallel (batch)
-      // TODO: For each position:
-      //   1. Get current market price
-      //   2. Analyze position with ML API
-      //   3. Record monitoring data
-      //   4. Check notification conditions
-      //   5. Send notifications if needed
-      // TODO: Log completion time and stats
+      // 1. Get all open positions
+      const positions = await UserTradingHistory.findAll({
+        where: { status: 'open' },
+        order: [['openedAt', 'DESC']],
+      });
 
-      throw new Error('Not implemented');
+      if (positions.length === 0) {
+        logger.info('No open positions to monitor');
+        return {
+          success: true,
+          positionsMonitored: 0,
+          duration: Date.now() - startTime,
+        };
+      }
+
+      logger.info(`Found ${positions.length} open positions to monitor`);
+
+      // 2. Process positions in parallel (batches of 10 to avoid overwhelming APIs)
+      const batchSize = 10;
+      const results = [];
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (let i = 0; i < positions.length; i += batchSize) {
+        const batch = positions.slice(i, i + batchSize);
+        logger.debug(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(positions.length / batchSize)} (${batch.length} positions)`);
+
+        // Process batch in parallel
+        const batchResults = await Promise.allSettled(
+          batch.map(position => this.monitorPosition(position))
+        );
+
+        // Count successes and errors
+        batchResults.forEach((result, index) => {
+          if (result.status === 'fulfilled' && result.value !== null) {
+            successCount++;
+            results.push(result.value);
+          } else {
+            errorCount++;
+            const position = batch[index];
+            logger.warn(`Failed to monitor position ${position.id}: ${result.reason || 'Unknown error'}`);
+          }
+        });
+
+        // Small delay between batches to avoid rate limiting
+        if (i + batchSize < positions.length) {
+          await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
+        }
+      }
+
+      const duration = Date.now() - startTime;
+      const avgTimePerPosition = positions.length > 0 ? duration / positions.length : 0;
+
+      logger.info(
+        `✅ Monitoring cycle completed: ${successCount} success, ${errorCount} errors, ${duration}ms total (${avgTimePerPosition.toFixed(0)}ms/position)`
+      );
+
+      return {
+        success: true,
+        positionsMonitored: successCount,
+        positionsFailed: errorCount,
+        totalPositions: positions.length,
+        duration,
+        avgTimePerPosition: Math.round(avgTimePerPosition),
+      };
     } catch (error) {
-      logger.error(`Error in monitoring cycle: ${error.message}`);
+      const duration = Date.now() - startTime;
+      logger.error(`❌ Error in monitoring cycle (${duration}ms): ${error.message}`);
+
+      return {
+        success: false,
+        error: error.message,
+        duration,
+      };
     }
   }
 
@@ -83,66 +149,234 @@ class MonitoringService {
    */
   async monitorPosition(position) {
     try {
-      logger.info(`Monitoring position ${position.id}: ${position.pair} ${position.action}`);
+      logger.debug(`Monitoring position ${position.id}: ${position.pair} ${position.action} @ ${position.entryPrice}`);
 
-      // TODO: Get current market price from forexService
-      // TODO: Calculate unrealized P&L
-      // TODO: Call ML API v3.0 /analyze_position
-      // TODO: Parse ML response (trend, reversal probability, recommendation)
-      // TODO: Create monitoring record in position_monitoring table
-      // TODO: Return monitoring record
+      // 1. Get current market price
+      const quote = await forexService.getQuote(position.pair);
+      const currentPrice = parseFloat(quote.data.price);
 
-      throw new Error('Not implemented');
+      // 2. Calculate unrealized P&L
+      const pnlData = this._calculateUnrealizedPnL(position, currentPrice);
+
+      // 3. Calculate risk-reward distances
+      const rrData = this.calculateRiskReward(
+        currentPrice,
+        position.action,
+        position.stopLoss,
+        position.takeProfit
+      );
+
+      // 4. Call ML API for position analysis
+      const mlAnalysis = await this.analyzePositionWithML(
+        position,
+        currentPrice,
+        pnlData.pnlPercentage
+      );
+
+      // 5. Check if trailing stop should be applied
+      const trailingStopData = await this._checkTrailingStop(position, currentPrice, pnlData);
+
+      // 6. Determine notification level
+      const notificationDecision = await this.shouldNotify(position, mlAnalysis, {});
+
+      // 7. Prepare monitoring data
+      const monitoringData = {
+        currentPrice,
+        unrealizedPnlPips: pnlData.pnlPips,
+        unrealizedPnlPercentage: pnlData.pnlPercentage,
+        trendDirection: mlAnalysis.trend_direction,
+        trendStrength: mlAnalysis.trend_strength,
+        reversalProbability: mlAnalysis.reversal_probability,
+        currentRisk: rrData.riskDistance,
+        currentReward: rrData.rewardDistance,
+        currentRrRatio: rrData.rrRatio,
+        recommendation: mlAnalysis.recommendation,
+        recommendationConfidence: mlAnalysis.confidence,
+        reasoning: mlAnalysis.reasoning,
+        notificationLevel: notificationDecision.level,
+      };
+
+      // 8. Record monitoring data to database
+      const record = await this.recordMonitoring(position.id, monitoringData);
+
+      // 9. Send notification if needed
+      if (notificationDecision.shouldNotify) {
+        await this.sendNotification(
+          position.userId,
+          position,
+          record,
+          notificationDecision.level
+        );
+      }
+
+      // 10. Apply trailing stop if triggered
+      if (trailingStopData.shouldAdjust) {
+        await this._applyTrailingStop(position, trailingStopData);
+      }
+
+      logger.debug(`Position ${position.id} monitored: ${mlAnalysis.recommendation} (PnL: ${pnlData.pnlPercentage.toFixed(2)}%)`);
+
+      return record;
     } catch (error) {
       logger.error(`Error monitoring position ${position.id}: ${error.message}`);
-      throw error;
+      // Don't throw - we want monitoring to continue for other positions
+      return null;
     }
+  }
+
+  /**
+   * Calculate unrealized P&L for a position
+   * @private
+   * @param {Object} position - Position data
+   * @param {number} currentPrice - Current market price
+   * @returns {Object} - { pnlPips, pnlPercentage }
+   */
+  _calculateUnrealizedPnL(position, currentPrice) {
+    const entryPrice = parseFloat(position.entryPrice);
+    let pnlPips = 0;
+    let pnlPercentage = 0;
+
+    if (position.action === 'buy') {
+      // Long position: profit if price goes up
+      pnlPips = (currentPrice - entryPrice) * 10000; // Convert to pips (4 decimal places)
+      pnlPercentage = ((currentPrice - entryPrice) / entryPrice) * 100;
+    } else if (position.action === 'sell') {
+      // Short position: profit if price goes down
+      pnlPips = (entryPrice - currentPrice) * 10000; // Convert to pips
+      pnlPercentage = ((entryPrice - currentPrice) / entryPrice) * 100;
+    }
+
+    return {
+      pnlPips: parseFloat(pnlPips.toFixed(2)),
+      pnlPercentage: parseFloat(pnlPercentage.toFixed(4)),
+    };
   }
 
   /**
    * Analyze position using ML API v3.0
    * @param {Object} position - Position data
    * @param {number} currentPrice - Current market price
-   * @param {number} unrealizedPnl - Unrealized P&L percentage
+   * @param {number} unrealizedPnlPercentage - Unrealized P&L percentage
    * @returns {Promise<Object>} - ML analysis result
    */
-  async analyzePositionWithML(position, currentPrice, unrealizedPnl) {
+  async analyzePositionWithML(position, currentPrice, unrealizedPnlPercentage) {
     try {
-      const holdingDuration = this.calculateHoldingDuration(position.opened_at);
+      const holdingDuration = this.calculateHoldingDuration(position.openedAt);
 
       const requestData = {
         pair: position.pair,
         direction: position.action,
-        entry_price: position.entry_price,
+        entry_price: parseFloat(position.entryPrice),
         current_price: currentPrice,
         holding_duration: holdingDuration, // in minutes
-        unrealized_pnl: unrealizedPnl,
+        unrealized_pnl: unrealizedPnlPercentage,
+        stop_loss: position.stopLoss ? parseFloat(position.stopLoss) : null,
+        take_profit: position.takeProfit ? parseFloat(position.takeProfit) : null,
       };
 
-      logger.debug(`Calling ML API v3.0 /analyze_position for ${position.pair}`);
+      logger.debug(`Calling ML API v3.0 /analyze_position for ${position.pair} (holding: ${holdingDuration}m, PnL: ${unrealizedPnlPercentage}%)`);
 
-      // TODO: Implement actual ML API call
-      // const response = await axios.post(`${this.ML_API_URL}/api/ml/v3/analyze_position`, requestData);
+      // TODO: Implement actual ML API call when ML v3.0 is ready
+      // const response = await axios.post(
+      //   `${this.ML_API_URL}/api/ml/v3/analyze_position`,
+      //   requestData,
+      //   { timeout: 5000 }
+      // );
       // return response.data;
 
-      // Placeholder response
-      return {
-        trend_direction: 'uptrend',
-        trend_strength: 0.65,
-        reversal_probability: 0.25,
-        current_rr_ratio: 1.8,
-        recommendation: 'hold',
-        confidence: 0.72,
-        reasoning: 'Trend remains strong, position is profitable. Hold for now.',
-        suggested_exit_percentage: null,
-        suggested_new_sl: null,
-        suggested_new_tp: null,
-      };
+      // Mock response with intelligent simulation based on position state
+      const mockAnalysis = this._generateMockAnalysis(position, currentPrice, unrealizedPnlPercentage, holdingDuration);
+      return mockAnalysis;
     } catch (error) {
-      logger.error(`ML API error: ${error.message}`);
+      logger.error(`ML API error for position ${position.id}: ${error.message}`);
       // Return fallback analysis if ML API fails
-      return this.getFallbackAnalysis(position, currentPrice, unrealizedPnl);
+      return this.getFallbackAnalysis(position, currentPrice, unrealizedPnlPercentage);
     }
+  }
+
+  /**
+   * Generate mock ML analysis (temporary until ML v3.0 is ready)
+   * @private
+   * @param {Object} position - Position data
+   * @param {number} currentPrice - Current market price
+   * @param {number} unrealizedPnlPercentage - Unrealized P&L percentage
+   * @param {number} holdingDuration - Holding duration in minutes
+   * @returns {Object} - Mock ML analysis
+   */
+  _generateMockAnalysis(position, currentPrice, unrealizedPnlPercentage, holdingDuration) {
+    // Simulate intelligent ML analysis based on position state
+    let recommendation = 'hold';
+    let confidence = 0.65;
+    let trendDirection = 'sideways';
+    let trendStrength = 0.55;
+    let reversalProbability = 0.30;
+    let reasoning = 'Position is being monitored. ';
+
+    // Check if position is profitable
+    if (unrealizedPnlPercentage > 0.5) {
+      trendDirection = position.action === 'buy' ? 'uptrend' : 'downtrend';
+      trendStrength = 0.65 + Math.min(unrealizedPnlPercentage * 0.05, 0.15);
+      reasoning += `Position is profitable (+${unrealizedPnlPercentage.toFixed(2)}%). `;
+
+      // If very profitable (>1.5%), suggest partial exit
+      if (unrealizedPnlPercentage > 1.5) {
+        recommendation = 'take_partial';
+        confidence = 0.75;
+        reversalProbability = 0.45;
+        reasoning += 'Strong profit achieved. Consider taking partial profits to secure gains.';
+      } else {
+        reasoning += 'Trend remains favorable. Continue holding.';
+      }
+    } else if (unrealizedPnlPercentage < -0.5) {
+      // Position is losing
+      reversalProbability = 0.55;
+      trendDirection = position.action === 'buy' ? 'downtrend' : 'uptrend';
+      reasoning += `Position is losing (${unrealizedPnlPercentage.toFixed(2)}%). `;
+
+      // If significant loss (>-1.5%), suggest exit
+      if (unrealizedPnlPercentage < -1.5) {
+        recommendation = 'exit';
+        confidence = 0.70;
+        reversalProbability = 0.65;
+        reasoning += 'Trend has reversed against position. Consider exiting to limit losses.';
+      } else {
+        reasoning += 'Monitor closely for further deterioration.';
+      }
+    } else {
+      // Position is neutral
+      reasoning += 'Position near breakeven. Wait for clearer trend.';
+    }
+
+    // Check holding duration
+    if (holdingDuration > 1440) { // >24 hours
+      reasoning += ` Position held for ${Math.floor(holdingDuration / 60)} hours with minimal progress.`;
+      if (Math.abs(unrealizedPnlPercentage) < 0.3) {
+        recommendation = 'exit';
+        confidence = 0.60;
+        reasoning += ' Consider closing due to lack of movement.';
+      }
+    }
+
+    // Check if near stop loss or take profit
+    const rrData = this.calculateRiskReward(
+      currentPrice,
+      position.action,
+      position.stopLoss,
+      position.takeProfit
+    );
+
+    return {
+      trend_direction: trendDirection,
+      trend_strength: parseFloat(trendStrength.toFixed(4)),
+      reversal_probability: parseFloat(reversalProbability.toFixed(4)),
+      current_rr_ratio: rrData.rrRatio,
+      recommendation: recommendation,
+      confidence: parseFloat(confidence.toFixed(4)),
+      reasoning: reasoning,
+      suggested_exit_percentage: recommendation === 'take_partial' ? 50 : null,
+      suggested_new_sl: null,
+      suggested_new_tp: null,
+    };
   }
 
   /**
@@ -181,23 +415,47 @@ class MonitoringService {
    */
   async recordMonitoring(positionId, monitoringData) {
     try {
-      // TODO: Insert record into position_monitoring table
-      // TODO: Include:
-      //   - positionId
-      //   - timestamp
-      //   - current_price
-      //   - unrealized_pnl_pips, unrealized_pnl_percentage
-      //   - trend_direction, trend_strength, reversal_probability
-      //   - current_risk, current_reward, current_rr_ratio
-      //   - recommendation, recommendation_confidence
-      //   - reasoning
-      //   - notification_sent (initially false)
-      //   - notification_level (determined by shouldNotify)
-      // TODO: Return created record
+      const {
+        currentPrice,
+        unrealizedPnlPips,
+        unrealizedPnlPercentage,
+        trendDirection,
+        trendStrength,
+        reversalProbability,
+        currentRisk,
+        currentReward,
+        currentRrRatio,
+        recommendation,
+        recommendationConfidence,
+        reasoning,
+        notificationLevel,
+      } = monitoringData;
 
-      throw new Error('Not implemented');
+      // Create monitoring record
+      const record = await PositionMonitoring.create({
+        positionId,
+        timestamp: new Date(),
+        currentPrice: parseFloat(currentPrice),
+        unrealizedPnlPips: unrealizedPnlPips ? parseFloat(unrealizedPnlPips) : null,
+        unrealizedPnlPercentage: unrealizedPnlPercentage ? parseFloat(unrealizedPnlPercentage) : null,
+        trendDirection: trendDirection || 'unknown',
+        trendStrength: trendStrength ? parseFloat(trendStrength) : null,
+        reversalProbability: reversalProbability ? parseFloat(reversalProbability) : null,
+        currentRisk: currentRisk ? parseFloat(currentRisk) : null,
+        currentReward: currentReward ? parseFloat(currentReward) : null,
+        currentRrRatio: currentRrRatio ? parseFloat(currentRrRatio) : null,
+        recommendation: recommendation || 'hold',
+        recommendationConfidence: recommendationConfidence ? parseFloat(recommendationConfidence) : null,
+        reasoning: reasoning || null,
+        notificationSent: false, // Initially not sent
+        notificationLevel: notificationLevel || null,
+      });
+
+      logger.debug(`Monitoring record created for position ${positionId}: ${recommendation} (confidence: ${recommendationConfidence})`);
+
+      return record.toJSON();
     } catch (error) {
-      logger.error(`Error recording monitoring data: ${error.message}`);
+      logger.error(`Error recording monitoring data for position ${positionId}: ${error.message}`);
       throw error;
     }
   }
@@ -232,9 +490,9 @@ class MonitoringService {
    * @param {Object} position - Position data
    * @param {Object} analysis - ML analysis result
    * @param {Object} userPreferences - User notification preferences
-   * @returns {Object} - { shouldNotify: boolean, level: number, reason: string }
+   * @returns {Promise<Object>} - { shouldNotify: boolean, level: number, reason: string }
    */
-  shouldNotify(position, analysis, userPreferences) {
+  async shouldNotify(position, analysis, userPreferences) {
     try {
       const { recommendation, confidence, reversal_probability } = analysis;
       const {
@@ -244,20 +502,122 @@ class MonitoringService {
         muteHours = [],
       } = userPreferences.notification_settings || {};
 
-      // TODO: Check mute hours
-      // TODO: Check cooldown periods (query last notification)
-      // TODO: Determine notification level:
-      //   Level 1 (urgent): Stop loss hit, take profit hit, critical reversal
-      //   Level 2 (important): Exit recommendation with high confidence
-      //   Level 3 (general): Trend change, adjustment suggestion
-      //   Level 4 (daily summary): Scheduled summary (not handled here)
-      // TODO: Compare level with urgencyThreshold
-      // TODO: Return decision
+      let level = 0;
+      let reason = '';
 
-      throw new Error('Not implemented');
+      // Determine notification level based on recommendation and confidence
+
+      // Level 1 (Critical/Urgent): Immediate action required
+      if (
+        recommendation === 'exit' && confidence >= 0.70 &&
+        (reversal_probability >= 0.65 || Math.abs(analysis.unrealized_pnl || 0) < -1.5)
+      ) {
+        level = 1;
+        reason = 'Critical exit recommendation with high confidence';
+      }
+
+      // Level 2 (Important): High-confidence actionable recommendations
+      else if (
+        (recommendation === 'take_partial' && confidence >= 0.70) ||
+        (recommendation === 'exit' && confidence >= 0.60) ||
+        (reversal_probability >= 0.60)
+      ) {
+        level = 2;
+        reason = recommendation === 'take_partial'
+          ? 'Partial profit-taking recommendation'
+          : 'Exit recommendation or trend reversal detected';
+      }
+
+      // Level 3 (General): Informational updates
+      else if (
+        (recommendation === 'adjust_sl' || recommendation === 'trailing_stop') ||
+        (confidence >= 0.50 && recommendation !== 'hold')
+      ) {
+        level = 3;
+        reason = 'Position adjustment suggestion';
+      }
+
+      // Level 4 (Daily summary): Not handled in real-time monitoring
+      // This is for scheduled daily summaries
+
+      // If level is 0 or below threshold, don't notify
+      if (level === 0 || level > urgencyThreshold) {
+        return {
+          shouldNotify: false,
+          level,
+          reason: level === 0 ? 'No actionable recommendation' : 'Below user urgency threshold',
+        };
+      }
+
+      // Check cooldown for levels 2 and 3
+      if (level === 2 || level === 3) {
+        const cooldownMinutes = level === 2 ? level2Cooldown : level3Cooldown;
+        const lastNotification = await this._getLastNotification(position.id, level);
+
+        if (lastNotification) {
+          const minutesSinceLastNotification = (Date.now() - new Date(lastNotification.timestamp).getTime()) / (1000 * 60);
+
+          if (minutesSinceLastNotification < cooldownMinutes) {
+            return {
+              shouldNotify: false,
+              level,
+              reason: `Cooldown active (${Math.ceil(cooldownMinutes - minutesSinceLastNotification)}m remaining)`,
+            };
+          }
+        }
+      }
+
+      // Check mute hours (skip for Level 1 - critical notifications)
+      if (level > 1 && muteHours.length > 0) {
+        const currentHour = new Date().getHours();
+        const isMuted = muteHours.some(range => {
+          const [start, end] = range.split('-').map(h => parseInt(h));
+          return currentHour >= start && currentHour < end;
+        });
+
+        if (isMuted) {
+          return {
+            shouldNotify: false,
+            level,
+            reason: 'Mute hours active',
+          };
+        }
+      }
+
+      // All checks passed - send notification
+      return {
+        shouldNotify: true,
+        level,
+        reason,
+      };
     } catch (error) {
       logger.error(`Error checking notification: ${error.message}`);
-      return { shouldNotify: false, level: 0, reason: 'Error' };
+      return { shouldNotify: false, level: 0, reason: 'Error checking notification' };
+    }
+  }
+
+  /**
+   * Get last notification for a position at a specific level
+   * @private
+   * @param {string} positionId - Position ID
+   * @param {number} level - Notification level
+   * @returns {Promise<Object|null>} - Last notification record
+   */
+  async _getLastNotification(positionId, level) {
+    try {
+      const record = await PositionMonitoring.findOne({
+        where: {
+          positionId,
+          notificationSent: true,
+          notificationLevel: level,
+        },
+        order: [['timestamp', 'DESC']],
+      });
+
+      return record;
+    } catch (error) {
+      logger.error(`Error fetching last notification: ${error.message}`);
+      return null;
     }
   }
 
@@ -270,16 +630,219 @@ class MonitoringService {
    */
   async sendNotification(userId, position, monitoringData, level) {
     try {
-      logger.info(`Sending level ${level} notification to user ${userId} for position ${position.id}`);
+      logger.info(`📨 Sending level ${level} notification to user ${userId} for position ${position.id}`);
 
-      // TODO: Format notification message based on level
-      // TODO: Call notificationService.sendNotification()
-      // TODO: Send via Discord, WebSocket, etc.
-      // TODO: Update monitoring record: notification_sent = true
+      // Format notification message based on level and monitoring data
+      const message = this._formatNotificationMessage(position, monitoringData, level);
 
-      throw new Error('Not implemented');
+      // TODO: Implement actual notification sending when notification service is ready
+      // For now, just log the notification
+      logger.info(`[NOTIFICATION Level ${level}] User ${userId}: ${message.title}`);
+      logger.debug(`Notification details: ${JSON.stringify(message, null, 2)}`);
+
+      // Update monitoring record to mark notification as sent
+      if (monitoringData.id) {
+        await PositionMonitoring.update(
+          { notificationSent: true },
+          { where: { id: monitoringData.id } }
+        );
+      }
+
+      return {
+        success: true,
+        level,
+        message,
+      };
     } catch (error) {
       logger.error(`Error sending notification: ${error.message}`);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Format notification message
+   * @private
+   * @param {Object} position - Position data
+   * @param {Object} monitoringData - Monitoring data
+   * @param {number} level - Notification level
+   * @returns {Object} - Formatted message
+   */
+  _formatNotificationMessage(position, monitoringData, level) {
+    const { pair, action, entryPrice } = position;
+    const {
+      currentPrice,
+      unrealizedPnlPips,
+      unrealizedPnlPercentage,
+      recommendation,
+      recommendationConfidence,
+      reasoning,
+      reversalProbability,
+      trendStrength,
+    } = monitoringData;
+
+    const levelEmoji = ['🚨', '⚠️', 'ℹ️', '📊'][level - 1] || 'ℹ️';
+    const pnlEmoji = unrealizedPnlPercentage > 0 ? '💚' : unrealizedPnlPercentage < 0 ? '🔴' : '⚪';
+
+    let title = '';
+    let priority = '';
+
+    switch (level) {
+      case 1:
+        title = `${levelEmoji} CRITICAL: ${pair} Position Alert`;
+        priority = 'URGENT';
+        break;
+      case 2:
+        title = `${levelEmoji} IMPORTANT: ${pair} Action Recommended`;
+        priority = 'HIGH';
+        break;
+      case 3:
+        title = `${levelEmoji} ${pair} Position Update`;
+        priority = 'NORMAL';
+        break;
+      default:
+        title = `${levelEmoji} ${pair} Summary`;
+        priority = 'LOW';
+    }
+
+    return {
+      title,
+      priority,
+      pair,
+      position: {
+        action: action.toUpperCase(),
+        entryPrice,
+        currentPrice,
+        unrealizedPnl: `${unrealizedPnlPips > 0 ? '+' : ''}${unrealizedPnlPips.toFixed(1)} pips (${unrealizedPnlPercentage > 0 ? '+' : ''}${unrealizedPnlPercentage.toFixed(2)}%)`,
+        emoji: pnlEmoji,
+      },
+      analysis: {
+        recommendation: recommendation.toUpperCase(),
+        confidence: `${(recommendationConfidence * 100).toFixed(0)}%`,
+        reversalProbability: reversalProbability ? `${(reversalProbability * 100).toFixed(0)}%` : 'N/A',
+        trendStrength: trendStrength ? `${(trendStrength * 100).toFixed(0)}%` : 'N/A',
+        reasoning,
+      },
+      riskWarning:
+        '⚠️ Risk Warning: Forex trading carries significant risk. Past performance does not guarantee future results. This is not financial advice.',
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Check if trailing stop should be applied
+   * @private
+   * @param {Object} position - Position data
+   * @param {number} currentPrice - Current market price
+   * @param {Object} pnlData - P&L data
+   * @returns {Promise<Object>} - { shouldAdjust: boolean, newStopLoss: number, reason: string }
+   */
+  async _checkTrailingStop(position, currentPrice, pnlData) {
+    try {
+      // Skip if no take profit set
+      if (!position.takeProfit || !position.stopLoss) {
+        return { shouldAdjust: false, reason: 'No TP/SL set' };
+      }
+
+      const entryPrice = parseFloat(position.entryPrice);
+      const takeProfit = parseFloat(position.takeProfit);
+      const stopLoss = parseFloat(position.stopLoss);
+
+      // Calculate progress towards take profit
+      let distanceToTP = 0;
+      let progressPercentage = 0;
+
+      if (position.action === 'buy') {
+        const totalDistance = takeProfit - entryPrice;
+        const currentDistance = currentPrice - entryPrice;
+        progressPercentage = (currentDistance / totalDistance) * 100;
+      } else if (position.action === 'sell') {
+        const totalDistance = entryPrice - takeProfit;
+        const currentDistance = entryPrice - currentPrice;
+        progressPercentage = (currentDistance / totalDistance) * 100;
+      }
+
+      // Rule 1: If profit >= 50% of TP distance, move SL to breakeven (entry price)
+      if (progressPercentage >= 50 && progressPercentage < 80) {
+        // Check if SL is not already at or better than breakeven
+        const currentSLAtBreakeven =
+          (position.action === 'buy' && stopLoss >= entryPrice) ||
+          (position.action === 'sell' && stopLoss <= entryPrice);
+
+        if (!currentSLAtBreakeven) {
+          return {
+            shouldAdjust: true,
+            newStopLoss: entryPrice,
+            reason: `Profit reached 50% of TP (${progressPercentage.toFixed(1)}%). Moving SL to breakeven.`,
+            type: 'breakeven',
+          };
+        }
+      }
+
+      // Rule 2: If profit >= 80% of TP distance, move SL to 50% TP level
+      if (progressPercentage >= 80) {
+        const fiftyPercentTP =
+          position.action === 'buy'
+            ? entryPrice + (takeProfit - entryPrice) * 0.5
+            : entryPrice - (entryPrice - takeProfit) * 0.5;
+
+        // Check if SL is not already at or better than 50% TP
+        const currentSLAtFiftyPercent =
+          (position.action === 'buy' && stopLoss >= fiftyPercentTP) ||
+          (position.action === 'sell' && stopLoss <= fiftyPercentTP);
+
+        if (!currentSLAtFiftyPercent) {
+          return {
+            shouldAdjust: true,
+            newStopLoss: fiftyPercentTP,
+            reason: `Profit reached 80% of TP (${progressPercentage.toFixed(1)}%). Moving SL to 50% TP level.`,
+            type: '50percent_tp',
+          };
+        }
+      }
+
+      return { shouldAdjust: false, reason: 'No trailing stop trigger' };
+    } catch (error) {
+      logger.error(`Error checking trailing stop: ${error.message}`);
+      return { shouldAdjust: false, reason: 'Error' };
+    }
+  }
+
+  /**
+   * Apply trailing stop adjustment
+   * @private
+   * @param {Object} position - Position data
+   * @param {Object} trailingStopData - Trailing stop data
+   */
+  async _applyTrailingStop(position, trailingStopData) {
+    try {
+      const { newStopLoss, reason, type } = trailingStopData;
+
+      logger.info(`🛡️ Applying trailing stop for position ${position.id}: ${reason}`);
+
+      // Update position stop loss
+      await positionService.adjustPosition(position.id, {
+        stopLoss: newStopLoss,
+      });
+
+      // Log the adjustment
+      logger.info(
+        `✅ Trailing stop applied: ${position.pair} SL updated to ${newStopLoss} (type: ${type})`
+      );
+
+      return {
+        success: true,
+        newStopLoss,
+        type,
+      };
+    } catch (error) {
+      logger.error(`Error applying trailing stop: ${error.message}`);
+      return {
+        success: false,
+        error: error.message,
+      };
     }
   }
 
@@ -305,13 +868,42 @@ class MonitoringService {
    */
   calculateRiskReward(currentPrice, action, stopLoss, takeProfit) {
     try {
-      // TODO: Calculate distance to SL (risk)
-      // TODO: Calculate distance to TP (reward)
-      // TODO: Calculate current RR ratio
-      // TODO: Handle buy vs sell direction
-      // TODO: Return data
+      let riskDistance = 0;
+      let rewardDistance = 0;
+      let rrRatio = 0;
 
-      throw new Error('Not implemented');
+      if (action === 'buy') {
+        // For long positions:
+        // Risk = current price - stop loss (how much we can lose)
+        // Reward = take profit - current price (how much we can gain)
+        if (stopLoss) {
+          riskDistance = Math.abs(currentPrice - stopLoss);
+        }
+        if (takeProfit) {
+          rewardDistance = Math.abs(takeProfit - currentPrice);
+        }
+      } else if (action === 'sell') {
+        // For short positions:
+        // Risk = stop loss - current price (how much we can lose)
+        // Reward = current price - take profit (how much we can gain)
+        if (stopLoss) {
+          riskDistance = Math.abs(stopLoss - currentPrice);
+        }
+        if (takeProfit) {
+          rewardDistance = Math.abs(currentPrice - takeProfit);
+        }
+      }
+
+      // Calculate RR ratio (reward / risk)
+      if (riskDistance > 0 && rewardDistance > 0) {
+        rrRatio = rewardDistance / riskDistance;
+      }
+
+      return {
+        riskDistance: parseFloat(riskDistance.toFixed(5)),
+        rewardDistance: parseFloat(rewardDistance.toFixed(5)),
+        rrRatio: parseFloat(rrRatio.toFixed(2)),
+      };
     } catch (error) {
       logger.error(`Error calculating risk-reward: ${error.message}`);
       return { riskDistance: 0, rewardDistance: 0, rrRatio: 0 };

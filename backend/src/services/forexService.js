@@ -570,6 +570,7 @@ initializeCache();
 
 module.exports = {
   getRealTimeRate,
+  getQuote: getRealTimeRate, // Alias for consistency with positionService
   getHistoricalData,
   getSupportedPairs,
   getApiUsageStats,
