@@ -125,10 +125,10 @@ const PositionMonitoring = sequelize.define('PositionMonitoring', {
 }, {
   tableName: 'position_monitoring',
   timestamps: false, // Using custom timestamp field
-  underscored: true,
+  underscored: false, // Database uses camelCase column names
   indexes: [
     {
-      fields: ['position_id'],
+      fields: ['positionId'],
       name: 'position_monitoring_position_id_index',
     },
     {
@@ -136,7 +136,7 @@ const PositionMonitoring = sequelize.define('PositionMonitoring', {
       name: 'position_monitoring_timestamp_index',
     },
     {
-      fields: ['position_id', 'timestamp'],
+      fields: ['positionId', 'timestamp'],
       name: 'position_monitoring_position_time_index',
     },
     {
