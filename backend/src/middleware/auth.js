@@ -37,7 +37,10 @@ const authenticate = async (req, res, next) => {
     // Verify token
     let decoded;
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
+      decoded = jwt.verify(token, process.env.JWT_SECRET, {
+        issuer: 'aifx-v2',
+        audience: 'aifx-v2-users',
+      });
     } catch (jwtError) {
       if (jwtError.name === 'TokenExpiredError') {
         return next(new AppError('Access token expired', 401, 'TOKEN_EXPIRED'));
