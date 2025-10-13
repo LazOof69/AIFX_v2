@@ -1,7 +1,7 @@
 # AIFX v2 開發任務清單
 
-**最後更新**: 2025-10-12
-**當前階段**: Phase 3 - 交易生命週期管理系統 v3.0
+**最後更新**: 2025-10-13
+**當前階段**: Phase 3 - 交易生命週期管理系統 v3.0 (Week 1 進行中)
 
 ---
 
@@ -23,7 +23,13 @@
 |------|------|------|----------|
 | **Phase 1**: 基礎系統建設 | ✅ 完成 | 100% | 2025-09-30 |
 | **Phase 2**: ML v1.0 + v2.0 | ✅ 完成 | 100% | 2025-10-12 |
-| **Phase 3**: 交易生命週期 v3.0 | 🔄 規劃中 | 0% | - |
+| **Phase 3**: 交易生命週期 v3.0 | 🔄 進行中 | **18%** | - |
+
+**Phase 3 詳細進度**:
+- Week 1 (資料庫+後端): **73%** (11/15 任務完成)
+- Week 2 (ML v3.0): 0%
+- Week 3 (ML API): 0%
+- Week 4 (Discord+前端): 0%
 
 ---
 
@@ -133,7 +139,11 @@
 
 ---
 
-## 🚀 Phase 3: v3.0 交易生命週期管理系統（規劃中）
+## 🚀 Phase 3: v3.0 交易生命週期管理系統（🔄 進行中 - 18%）
+
+**更新日期**: 2025-10-13
+**當前狀態**: Week 1 進行中 (73% 完成)
+**參考文檔**: `PHASE3_PROGRESS_STATUS.md`, `PHASE3_WEEK1_DAY1_SUMMARY.md`, `PHASE3_WEEK1_DAY2_SUMMARY.md`
 
 ### 核心理念
 
@@ -191,47 +201,36 @@
 
 ## 📅 Phase 3 開發計畫（4 週）
 
-### Week 1: 資料庫 + 後端架構（5-7 天）
+### Week 1: 資料庫 + 後端架構（5-7 天 | 🔄 進行中 | 73% 完成）
 
-#### 1.1 資料庫擴展 ⭐ 修正版
+**實際用時**: Day 1-4 (2025-10-12 至 2025-10-13)
+**完成任務**: 11/15
+**提交記錄**: `4bee990`, `a073235`, `088bf99`
+
+#### 1.1 資料庫擴展 ⭐ **✅ 100% 完成**
 
 **複用現有表** (參考: PHASE3_CONFLICT_ANALYSIS.md):
 - [x] `trading_signals` 表 - 已存在，用於信號記錄（不新增 signals 表）
 - [x] `user_trading_history` 表 - 已存在，用於持倉追蹤（不新增 user_positions 表）
 
 **需要新增的表**:
-- [ ] 創建 `position_monitoring` 表（監控歷史記錄）⭐
-  ```sql
-  - id (uuid, PK)
-  - position_id (uuid, FK → user_trading_history.id)
-  - timestamp (timestamptz)
-  - current_price (decimal)
-  - unrealized_pnl_pips, unrealized_pnl_percentage (decimal)
-  - trend_direction (varchar), trend_strength (decimal)
-  - reversal_probability (decimal)
-  - current_risk, current_reward, current_rr_ratio (decimal)
-  - recommendation (varchar), recommendation_confidence (decimal)
-  - reasoning (text)
-  - notification_sent (boolean), notification_level (integer)
-  - created_at (timestamptz)
-  ```
+- [x] ✅ 創建 `position_monitoring` 表（監控歷史記錄）
+  - Migration: `20251012000001-create-position-monitoring.js`
+  - 18 個欄位，7 個索引
+  - 支援 4 級通知系統
+  - Model: `PositionMonitoring.js` (240 行)
 
 **擴展現有表**:
-- [ ] 擴展 `user_preferences.notification_settings` JSONB
-  ```json
-  新增欄位:
-  - urgency_threshold: 1-4 (通知緊急度閾值)
-  - level2_cooldown: 5 (分鐘)
-  - level3_cooldown: 30 (分鐘)
-  - daily_summary_time: "22:00"
-  - mute_hours: ["00:00-07:00"]
-  - trailing_stop_enabled: true
-  ```
+- [x] ✅ 擴展 `user_preferences.notification_settings` JSONB
+  - Migration: `20251012000002-extend-notification-settings.js`
+  - 新增 8 個通知控制欄位
+  - 向後兼容現有用戶
+  - Model 更新: `UserPreferences.js`
 
-- [ ] 創建 Migration 文件
-- [ ] 測試資料庫 Schema
+- [x] ✅ 創建 Migration 文件
+- [x] ✅ 測試資料庫 Schema
 
-#### 1.2 後端 API 設計 ⭐ 修正版
+#### 1.2 後端 API 設計 ⭐ **✅ 117% 完成** (超出計畫)
 
 **複用現有端點** (參考: PHASE3_CONFLICT_ANALYSIS.md):
 - [x] `GET /api/v1/trading/signal/:pair` - 已存在，用於信號查詢
@@ -240,56 +239,81 @@
 - [x] `POST /api/v1/notifications/send` - 已存在，用於通知發送
 
 **需要新增的端點** (新增 /positions/* 路由):
-- [ ] **POST /api/v1/positions/open**
-  - 用戶回報開倉
-  - Body: { signal_id, pair, direction, entry_price, position_size }
-  - 寫入: user_trading_history 表
-  - 返回: position_id, 監控啟動確認
+- [x] ✅ **POST /api/v1/positions/open**
+  - Controller: `positionController.openPosition()`
+  - Service: `positionService.openPosition()`
+  - Joi validation: `openPositionSchema`
+  - 測試: ✅ 通過
 
-- [ ] **POST /api/v1/positions/close**
-  - 用戶回報平倉
-  - Body: { position_id, exit_price, exit_percentage }
-  - 更新: user_trading_history 表
-  - 返回: 績效數據（pnl_pips, pnl_percentage）
+- [x] ✅ **POST /api/v1/positions/close**
+  - Controller: `positionController.closePosition()`
+  - Service: `positionService.closePosition()`
+  - 支援部分平倉 (exitPercentage)
+  - 測試: ✅ 通過 (含 partial close 3 scenarios)
 
-- [ ] **GET /api/v1/positions/:id**
-  - 查詢單一持倉詳情
-  - 返回: 持倉信息 + 最新監控數據
+- [x] ✅ **GET /api/v1/positions/:id**
+  - Controller: `positionController.getPosition()`
+  - Service: `positionService.getPosition()`
+  - 支援查詢監控數據
+  - 測試: ✅ 通過
 
-- [ ] **GET /api/v1/positions/:id/monitor**
-  - 查詢持倉監控歷史
-  - 返回: position_monitoring 記錄列表
+- [x] ✅ **GET /api/v1/positions/:id/monitor**
+  - Controller: `positionController.getMonitoringHistory()`
+  - Service: 調用 `PositionMonitoring.getHistory()`
+  - 測試: ✅ 通過
 
-- [ ] **GET /api/v1/positions/user/:userId**
-  - 查詢用戶所有持倉
-  - 參數: status (open/closed)
-  - 返回: 持倉列表
+- [x] ✅ **GET /api/v1/positions/user/:userId**
+  - Controller: `positionController.getUserPositions()`
+  - Service: `positionService.getUserPositions()`
+  - 支援分頁和過濾
+  - 測試: ✅ 通過
 
-- [ ] **PUT /api/v1/positions/:id/adjust**
-  - 調整止損止盈
-  - Body: { new_stop_loss, new_take_profit }
-  - 更新: user_trading_history 表
+- [x] ✅ **PUT /api/v1/positions/:id/adjust**
+  - Controller: `positionController.adjustPosition()`
+  - Service: `positionService.adjustPosition()`
+  - 測試: ✅ 通過
 
-#### 1.3 持倉監控服務
-- [ ] 創建 `positionMonitor.js` 服務
+- [x] ✅ **GET /api/v1/positions/user/:userId/statistics** (額外實現)
+  - Controller: `positionController.getPositionStatistics()`
+  - Service: `positionService.getPositionStatistics()`
+  - 返回: win rate, total P&L, average holding duration
+  - 測試: ✅ 通過 (19 trades aggregated)
+
+**實現文件**:
+- Routes: `routes/positions.js` (204 行)
+- Controller: `positionController.js` (291 行)
+- Service: `positionService.js` (517 行)
+- Models: `UserTradingHistory.js`, `PositionMonitoring.js`
+
+#### 1.3 持倉監控服務 ⭐ **⏳ 0% (待完成)**
+
+**預計時間**: 2-3 天
+**依賴**: ML API (可先用 mock data 測試)
+
+- [ ] ⏳ 創建 `positionMonitor.js` 服務
   - 每分鐘執行一次
   - 查詢所有 open positions
-  - 並行調用 ML API 分析
+  - 並行調用 ML API 分析 (先用 mock data)
   - 記錄到 position_monitoring 表
   - 判斷是否需要通知用戶
   - 發送 Discord/WebSocket 通知
-- [ ] 實現追蹤止損邏輯
+- [ ] ⏳ 實現追蹤止損邏輯
   - 盈利達 50% TP → 移動 SL 到成本價
   - 盈利達 80% TP → 移動 SL 到 50% TP
-- [ ] 實現通知條件判斷
+- [ ] ⏳ 實現通知條件判斷
   - 建議出場且信心 > 0.7
   - 趨勢反轉概率 > 0.6
   - 達到止損/止盈
   - 持倉超過 24H 無進展
-- [ ] 錯誤處理和重試機制
-- [ ] 日誌記錄
+- [ ] ⏳ 錯誤處理和重試機制
+- [ ] ⏳ 日誌記錄
 
-**預計時間**: 5-7 天
+**Week 1 總結**:
+- **預計時間**: 5-7 天
+- **實際用時**: 4 天 (Day 1-4)
+- **完成度**: 73% (11/15 任務)
+- **狀態**: 🔄 進行中，剩餘監控服務待完成
+- **測試報告**: `PHASE3_DAY3-4_TESTING_REPORT.md`
 
 ---
 
