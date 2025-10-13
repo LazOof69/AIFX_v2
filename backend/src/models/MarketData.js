@@ -118,6 +118,7 @@ const MarketData = sequelize.define('MarketData', {
   },
 }, {
   tableName: 'market_data',
+  underscored: true, // Database will use snake_case column names
   indexes: [
     {
       unique: true,

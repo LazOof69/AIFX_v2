@@ -194,6 +194,7 @@ const TradingSignal = sequelize.define('TradingSignal', {
 }, {
   tableName: 'trading_signals',
   paranoid: false, // Disable soft deletes (no deleted_at column)
+  underscored: true, // Database uses snake_case column names
   indexes: [
     {
       fields: ['userId'],
