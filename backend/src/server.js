@@ -6,6 +6,7 @@
 const { app, server } = require('./app');
 const { testConnection, syncDatabase } = require('./config/database');
 const { handleUnhandledRejection, handleUncaughtException } = require('./middleware/errorHandler');
+const monitoringService = require('./services/monitoringService');
 
 // Handle uncaught exceptions
 process.on('uncaughtException', handleUncaughtException);
@@ -47,6 +48,11 @@ const startServer = async () => {
       if (process.env.NODE_ENV === 'development') {
         console.log('🔧 Development mode: Database auto-sync enabled');
       }
+
+      // Start position monitoring service (Phase 3)
+      console.log('🔄 Starting position monitoring service...');
+      monitoringService.startMonitoring();
+      console.log('✅ Position monitoring service started (checks every 60 seconds)');
     });
 
   } catch (error) {
@@ -54,6 +60,31 @@ const startServer = async () => {
     process.exit(1);
   }
 };
+
+// Graceful shutdown handler
+const gracefulShutdown = () => {
+  console.log('\n⏳ Graceful shutdown initiated...');
+
+  // Stop monitoring service
+  console.log('🛑 Stopping position monitoring service...');
+  monitoringService.stopMonitoring();
+
+  // Close server
+  server.close(() => {
+    console.log('✅ Server closed gracefully');
+    process.exit(0);
+  });
+
+  // Force shutdown after 10 seconds
+  setTimeout(() => {
+    console.error('⚠️ Forced shutdown after timeout');
+    process.exit(1);
+  }, 10000);
+};
+
+// Handle shutdown signals
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
 
 // Start the server
 startServer();

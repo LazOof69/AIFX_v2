@@ -153,6 +153,13 @@ class MonitoringService {
 
       // 1. Get current market price
       const quote = await forexService.getQuote(position.pair);
+
+      // Handle null response from forex service (API limits, errors, etc.)
+      if (!quote || !quote.data || !quote.data.price) {
+        logger.warn(`Unable to get price for ${position.pair}. Skipping monitoring cycle for position ${position.id}`);
+        return null;
+      }
+
       const currentPrice = parseFloat(quote.data.price);
 
       // 2. Calculate unrealized P&L
