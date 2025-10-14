@@ -1,0 +1,17 @@
+{
+  "version": "3.0-two-stage",
+  "stage1": {
+    "task": "reversal_detection",
+    "output": "has_reversal (binary)",
+    "loss": "focal_loss",
+    "parameters": 40385
+  },
+  "stage2": {
+    "task": "direction_classification",
+    "output": "direction (0=long, 1=short)",
+    "loss": "binary_crossentropy",
+    "parameters": 24337
+  },
+  "sequence_length": 20,
+  "trained_at": "2025-10-14T13:56:51.087130"
+}
