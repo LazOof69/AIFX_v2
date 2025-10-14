@@ -1,0 +1,17 @@
+{
+  "features": [
+    "close",
+    "high",
+    "low",
+    "sma_20",
+    "ema_12",
+    "rsi_14",
+    "macd",
+    "macd_signal",
+    "bb_middle",
+    "bb_width",
+    "atr_14",
+    "adx_14"
+  ],
+  "count": 12
+}

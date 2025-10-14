@@ -1,0 +1,49 @@
+{
+  "version": "3.0-two-stage-classweight",
+  "stage1": {
+    "task": "reversal_detection",
+    "loss": "binary_crossentropy",
+    "class_weights": {
+      "0": 0.5170340681362725,
+      "1": 15.176470588235293
+    },
+    "features": {
+      "count": 12,
+      "list": [
+        "close",
+        "high",
+        "low",
+        "sma_20",
+        "ema_12",
+        "rsi_14",
+        "macd",
+        "macd_signal",
+        "bb_middle",
+        "bb_width",
+        "atr_14",
+        "adx_14"
+      ]
+    },
+    "normalization": "StandardScaler",
+    "architecture": {
+      "lstm_units": [
+        64,
+        32
+      ],
+      "dropout": 0.2,
+      "l2_reg": 0.0001
+    },
+    "test_metrics": {
+      "loss": 0.6896774768829346,
+      "compile_metrics": 0.6859503984451294
+    },
+    "prediction_stats": {
+      "min": 4.131847890675999e-05,
+      "max": 0.9008702635765076,
+      "mean": 0.2514995336532593,
+      "std": 0.3511708378791809
+    }
+  },
+  "trained_at": "2025-10-14T14:40:36.863545",
+  "notes": "Fixed zero-weight issue by replacing Focal Loss with Binary Crossentropy + class_weight"
+}

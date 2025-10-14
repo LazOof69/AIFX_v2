@@ -1,7 +1,7 @@
 {
-  "evaluation_date": "2025-10-14T14:18:40.102328",
+  "evaluation_date": "2025-10-14T14:44:14.395693",
   "test_samples": 242,
-  "overall_accuracy": 0.0371900826446281,
+  "overall_accuracy": 0.6859504132231405,
   "distribution": {
     "true": {
       "none": 233,
@@ -9,15 +9,15 @@
       "short": 4
     },
     "predicted": {
-      "none": 0,
-      "long": 129,
-      "short": 113
+      "none": 173,
+      "long": 31,
+      "short": 38
     }
   },
   "stage1_performance": {
-    "true_positives": 9,
-    "false_positives": 233,
-    "true_negatives": 0,
-    "false_negatives": 0
+    "true_positives": 1,
+    "false_positives": 68,
+    "true_negatives": 165,
+    "false_negatives": 8
   }
 }

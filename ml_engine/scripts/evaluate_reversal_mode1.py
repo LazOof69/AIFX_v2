@@ -21,6 +21,7 @@ import numpy as np
 import json
 from datetime import datetime
 import logging
+import pickle
 
 from tensorflow import keras
 from models.two_stage_reversal_predictor import TwoStageReversalPredictor
@@ -83,10 +84,42 @@ class ReversalEvaluator:
         logger.info("Loading Test Data")
         logger.info("="*80)
 
+        # Load selected features list
+        features_list_file = self.models_dir / 'selected_features.json'
+        if features_list_file.exists():
+            with open(features_list_file, 'r') as f:
+                features_config = json.load(f)
+                selected_features = features_config['features']
+            logger.info(f"Using {len(selected_features)} selected features from trained model")
+        else:
+            selected_features = None
+            logger.warning("selected_features.json not found, using all features")
+
         # Load features
         features_file = self.data_dir / 'EURUSD_reversal_mode1_test_features.csv'
         features = pd.read_csv(features_file, index_col=0, parse_dates=True)
-        logger.info(f"Features: {features.shape}")
+
+        # Select only trained features
+        if selected_features:
+            features = features[selected_features]
+            logger.info(f"Features: {features.shape} (selected)")
+        else:
+            logger.info(f"Features: {features.shape} (all)")
+
+        # Load and apply scaler
+        scaler_file = self.models_dir / 'feature_scaler.pkl'
+        if scaler_file.exists():
+            with open(scaler_file, 'rb') as f:
+                scaler = pickle.load(f)
+            logger.info(f"Loaded scaler, normalizing features...")
+            features_normalized = scaler.transform(features)
+            features = pd.DataFrame(
+                features_normalized,
+                index=features.index,
+                columns=features.columns
+            )
+        else:
+            logger.warning("feature_scaler.pkl not found, using raw features")
 
         # Load labels
         labels_file = self.data_dir / 'EURUSD_reversal_mode1_test_labels.csv'
