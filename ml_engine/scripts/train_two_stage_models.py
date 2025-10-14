@@ -163,14 +163,14 @@ class TwoStageTrainer:
         X_val = data['val']['X']
         y_val = data['val']['y']
 
-        # Create model
+        # Create model with reduced regularization
         model_builder = ReversalDetector(
             sequence_length=self.sequence_length,
             num_features=X_train.shape[2],
             lstm_units=64,
-            dropout_rate=0.4
+            dropout_rate=0.2  # Reduced from 0.4
         )
-        model = model_builder.create(focal_gamma=2.0, focal_alpha=0.25)
+        model = model_builder.create(focal_gamma=1.5, focal_alpha=0.25)  # Reduced gamma from 2.0
 
         logger.info("\nModel architecture:")
         model.summary()

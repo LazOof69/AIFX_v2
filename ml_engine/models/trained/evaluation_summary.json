@@ -1,0 +1,23 @@
+{
+  "evaluation_date": "2025-10-14T14:18:40.102328",
+  "test_samples": 242,
+  "overall_accuracy": 0.0371900826446281,
+  "distribution": {
+    "true": {
+      "none": 233,
+      "long": 5,
+      "short": 4
+    },
+    "predicted": {
+      "none": 0,
+      "long": 129,
+      "short": 113
+    }
+  },
+  "stage1_performance": {
+    "true_positives": 9,
+    "false_positives": 233,
+    "true_negatives": 0,
+    "false_negatives": 0
+  }
+}

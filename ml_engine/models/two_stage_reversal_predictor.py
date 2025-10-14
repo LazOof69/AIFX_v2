@@ -83,7 +83,7 @@ class ReversalDetector:
     """
 
     def __init__(self, sequence_length: int = 20, num_features: int = 38,
-                 lstm_units: int = 64, dropout_rate: float = 0.4):
+                 lstm_units: int = 64, dropout_rate: float = 0.2):
         """
         Initialize reversal detector
 
@@ -91,7 +91,7 @@ class ReversalDetector:
             sequence_length: Number of candles in lookback window
             num_features: Number of technical indicators
             lstm_units: Number of LSTM units
-            dropout_rate: Dropout rate for regularization
+            dropout_rate: Dropout rate for regularization (default: 0.2, reduced from 0.4)
         """
         self.sequence_length = sequence_length
         self.num_features = num_features
@@ -114,11 +114,11 @@ class ReversalDetector:
             name='market_data'
         )
 
-        # LSTM layers
+        # LSTM layers (reduced L2 regularization from 0.01 to 0.0001)
         x = layers.LSTM(
             self.lstm_units,
             return_sequences=True,
-            kernel_regularizer=regularizers.l2(0.01),
+            kernel_regularizer=regularizers.l2(0.0001),
             name='lstm_1'
         )(inputs)
         x = layers.Dropout(self.dropout_rate, name='dropout_1')(x)
@@ -126,16 +126,16 @@ class ReversalDetector:
         x = layers.LSTM(
             self.lstm_units // 2,
             return_sequences=False,
-            kernel_regularizer=regularizers.l2(0.01),
+            kernel_regularizer=regularizers.l2(0.0001),
             name='lstm_2'
         )(x)
         x = layers.Dropout(self.dropout_rate, name='dropout_2')(x)
 
-        # Dense layers
+        # Dense layers (reduced L2 regularization from 0.01 to 0.0001)
         x = layers.Dense(
             32,
             activation='relu',
-            kernel_regularizer=regularizers.l2(0.01),
+            kernel_regularizer=regularizers.l2(0.0001),
             name='dense_1'
         )(x)
         x = layers.Dropout(self.dropout_rate / 2, name='dropout_3')(x)
@@ -143,7 +143,7 @@ class ReversalDetector:
         x = layers.Dense(
             16,
             activation='relu',
-            kernel_regularizer=regularizers.l2(0.01),
+            kernel_regularizer=regularizers.l2(0.0001),
             name='dense_2'
         )(x)
 
@@ -165,14 +165,14 @@ class ReversalDetector:
 
         return model
 
-    def compile_model(self, model: keras.Model, focal_gamma: float = 2.0,
+    def compile_model(self, model: keras.Model, focal_gamma: float = 1.5,
                      focal_alpha: float = 0.25) -> keras.Model:
         """
         Compile model with Focal Loss
 
         Args:
             model: Keras model to compile
-            focal_gamma: Focal loss gamma parameter
+            focal_gamma: Focal loss gamma parameter (default: 1.5, reduced from 2.0)
             focal_alpha: Focal loss alpha parameter
 
         Returns:
@@ -194,12 +194,12 @@ class ReversalDetector:
         logger.info("✅ Stage 1 model compiled")
         return model
 
-    def create(self, focal_gamma: float = 2.0, focal_alpha: float = 0.25) -> keras.Model:
+    def create(self, focal_gamma: float = 1.5, focal_alpha: float = 0.25) -> keras.Model:
         """
         Build and compile complete model
 
         Args:
-            focal_gamma: Focal loss gamma parameter
+            focal_gamma: Focal loss gamma parameter (default: 1.5, reduced from 2.0)
             focal_alpha: Focal loss alpha parameter
 
         Returns:
