@@ -1,0 +1,24 @@
+{
+  "optimal_threshold": 0.2,
+  "optimization_date": "2025-10-15",
+  "strategy": "F2-Score (favors recall)",
+  "expected_performance": {
+    "precision": 0.0253,
+    "recall": 0.2222,
+    "f1_score": 0.0455,
+    "f2_score": 0.0870,
+    "accuracy": 0.6529
+  },
+  "previous_threshold": 0.5,
+  "previous_performance": {
+    "precision": 0.0145,
+    "recall": 0.1111,
+    "f1_score": 0.0256,
+    "f2_score": 0.0476
+  },
+  "improvement": {
+    "recall_gain": "2x (from 11.11% to 22.22%)",
+    "tp_gain": "1 -> 2 reversals detected"
+  },
+  "note": "Threshold 0.2 is optimal based on F2-Score (emphasizes recall). Further improvement requires data augmentation or model architecture changes."
+}

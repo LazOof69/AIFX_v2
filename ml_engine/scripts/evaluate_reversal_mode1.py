@@ -69,14 +69,26 @@ class ReversalEvaluator:
         stage2_model = keras.models.load_model(stage2_path, compile=False)
         logger.info(f"✅ Stage 2 loaded: {stage2_model.count_params():,} parameters")
 
+        # Load optimal threshold
+        threshold_config_path = self.models_dir / 'stage1_threshold.json'
+        if threshold_config_path.exists():
+            import json
+            with open(threshold_config_path, 'r') as f:
+                threshold_config = json.load(f)
+                optimal_threshold = threshold_config['optimal_threshold']
+            logger.info(f"Using optimal threshold from config: {optimal_threshold}")
+        else:
+            optimal_threshold = 0.5
+            logger.warning("Threshold config not found, using default: 0.5")
+
         # Create predictor
         self.predictor = TwoStageReversalPredictor(
             stage1_model=stage1_model,
             stage2_model=stage2_model,
-            stage1_threshold=0.5
+            stage1_threshold=optimal_threshold
         )
 
-        logger.info("\n✅ Two-stage predictor ready!\n")
+        logger.info(f"\n✅ Two-stage predictor ready with threshold={optimal_threshold}!\n")
 
     def load_test_data(self, sequence_length: int = 20):
         """Load test data"""
