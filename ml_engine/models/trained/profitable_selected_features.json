@@ -1,0 +1,18 @@
+{
+  "features": [
+    "sma_20",
+    "sma_50",
+    "ema_12",
+    "ema_26",
+    "rsi_14",
+    "macd",
+    "macd_signal",
+    "macd_histogram",
+    "bb_width",
+    "atr_14",
+    "stoch_k",
+    "adx_14"
+  ],
+  "num_features": 12,
+  "description": "12 core technical indicators"
+}
