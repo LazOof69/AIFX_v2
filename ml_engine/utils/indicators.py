@@ -118,6 +118,78 @@ def calculate_adx(df, period=14):
 
     return adx
 
+def calculate_model_indicators(df, features_list=None):
+    """
+    Calculate ONLY the technical indicators needed by the model
+
+    This function is optimized for the profitable reversal model v3.1 which uses 12 features.
+    Maximum lookback period is 50 (sma_50), so it only requires ~60 candles of data
+    instead of 200+ needed by calculate_all_indicators().
+
+    Args:
+        df: DataFrame with OHLC data (open, high, low, close)
+        features_list: List of feature names to calculate. If None, uses default 12 features.
+
+    Returns:
+        DataFrame with selected technical indicators added
+    """
+    df = df.copy()
+
+    # Default features for profitable reversal model v3.1
+    if features_list is None:
+        features_list = [
+            'sma_20', 'sma_50', 'ema_12', 'ema_26', 'rsi_14',
+            'macd', 'macd_signal', 'macd_histogram', 'bb_width',
+            'atr_14', 'stoch_k', 'adx_14'
+        ]
+
+    # Calculate only requested indicators
+    if 'sma_20' in features_list:
+        df['sma_20'] = calculate_sma(df, 20)
+
+    if 'sma_50' in features_list:
+        df['sma_50'] = calculate_sma(df, 50)
+
+    if 'ema_12' in features_list:
+        df['ema_12'] = calculate_ema(df, 12)
+
+    if 'ema_26' in features_list:
+        df['ema_26'] = calculate_ema(df, 26)
+
+    if 'rsi_14' in features_list:
+        df['rsi_14'] = calculate_rsi(df, 14)
+
+    if any(x in features_list for x in ['macd', 'macd_signal', 'macd_histogram']):
+        macd, signal, histogram = calculate_macd(df)
+        df['macd'] = macd
+        df['macd_signal'] = signal
+        df['macd_histogram'] = histogram
+
+    if 'bb_width' in features_list or any(x in features_list for x in ['bb_upper', 'bb_middle', 'bb_lower']):
+        bb_upper, bb_middle, bb_lower = calculate_bollinger_bands(df)
+        df['bb_upper'] = bb_upper
+        df['bb_middle'] = bb_middle
+        df['bb_lower'] = bb_lower
+        df['bb_width'] = bb_upper - bb_lower
+
+    if 'atr_14' in features_list:
+        df['atr_14'] = calculate_atr(df, 14)
+
+    if 'stoch_k' in features_list or 'stoch_d' in features_list:
+        stoch_k, stoch_d = calculate_stochastic(df)
+        df['stoch_k'] = stoch_k
+        df['stoch_d'] = stoch_d
+
+    if 'adx_14' in features_list:
+        df['adx_14'] = calculate_adx(df, 14)
+
+    # Drop rows with NaN values (from indicator calculations)
+    # With max lookback of 50, this should only remove ~50 rows instead of 200+
+    df = df.dropna()
+
+    return df
+
+
 def calculate_all_indicators(df):
     """
     Calculate all technical indicators and add them to the dataframe

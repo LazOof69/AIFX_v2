@@ -26,7 +26,7 @@ from model_manager import ModelManager
 from prediction_service import PredictionService
 from ab_testing import ABTestingFramework
 from data_processing.preprocessor import DataPreprocessor
-from utils.indicators import calculate_all_indicators
+from utils.indicators import calculate_model_indicators
 
 logger = logging.getLogger(__name__)
 
@@ -270,10 +270,19 @@ async def predict_reversal_raw(request: ReversalPredictionRequest):
 
         logger.info(f"DataFrame created with {len(df)} rows")
 
-        # Calculate technical indicators
+        # Load model's feature configuration
+        import json
+        features_path = '/root/AIFX_v2/ml_engine/models/trained/profitable_selected_features.json'
+        with open(features_path, 'r') as f:
+            features_config = json.load(f)
+        expected_features = features_config['features']
+        logger.info(f"Model requires {len(expected_features)} features: {expected_features}")
+
+        # Calculate ONLY the technical indicators needed by the model
+        # This optimized function only drops ~50 rows (max lookback) instead of 200+
         try:
-            df = calculate_all_indicators(df)
-            logger.info(f"Technical indicators calculated: {len(df.columns)} total columns")
+            df = calculate_model_indicators(df, features_list=expected_features)
+            logger.info(f"Technical indicators calculated: {len(df)} rows remaining after preprocessing")
         except Exception as e:
             logger.error(f"Failed to calculate indicators: {e}")
             raise HTTPException(
@@ -281,41 +290,35 @@ async def predict_reversal_raw(request: ReversalPredictionRequest):
                 detail=f"Failed to calculate technical indicators: {str(e)}"
             )
 
-        # Select features for prediction (12 features used by profitable model v3.1)
-        # Load from the model's feature file
-        import json
-        features_path = '/root/AIFX_v2/ml_engine/models/trained/profitable_selected_features.json'
-        with open(features_path, 'r') as f:
-            features_config = json.load(f)
-        expected_features = features_config['features']
-        logger.info(f"Loaded {len(expected_features)} expected features from model config")
-
-        # Filter only available features
+        # Verify all required features are present
         available_features = [col for col in expected_features if col in df.columns]
         missing_features = [col for col in expected_features if col not in df.columns]
 
         if missing_features:
-            logger.warning(f"Missing {len(missing_features)} features: {missing_features[:5]}...")
-
-        logger.info(f"Using {len(available_features)} features for prediction")
-
-        df_features = df[available_features].copy()
-
-        # Remove NaN rows (from indicator calculation at start of series)
-        # Only drop rows where there are NaN values
-        initial_len = len(df_features)
-        df_features = df_features.dropna(how='any')
-        dropped_rows = initial_len - len(df_features)
-
-        logger.info(f"Dropped {dropped_rows} rows with NaN values, {len(df_features)} rows remaining")
-
-        if len(df_features) < 60:
+            logger.error(f"Missing {len(missing_features)} features: {missing_features}")
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Insufficient data after preprocessing. Need 60+ candles, got {len(df_features)}. Try providing more historical data (150+ candles recommended)."
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Feature calculation failed. Missing features: {missing_features}"
             )
 
-        logger.info(f"After cleaning: {len(df_features)} rows available")
+        logger.info(f"✅ All {len(available_features)} required features present")
+
+        # Select features for model
+        df_features = df[expected_features].copy()
+
+        # Load minimum required data from model metadata
+        metadata_path = '/root/AIFX_v2/ml_engine/models/trained/profitable_stage1_metadata.json'
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+        min_sequence_length = metadata['architecture']['sequence_length']
+
+        if len(df_features) < min_sequence_length:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Insufficient data after preprocessing. Need {min_sequence_length}+ candles, got {len(df_features)}. Try providing more historical data (100+ candles recommended)."
+            )
+
+        logger.info(f"✅ Preprocessing complete: {len(df_features)} rows available for prediction")
 
         # Load scaler and prepare features
         try:
@@ -330,8 +333,14 @@ async def predict_reversal_raw(request: ReversalPredictionRequest):
             scaled_features = scaler.transform(df_features.values)
             logger.info(f"Features scaled: {scaled_features.shape}")
 
-            # Take last 60 candles for prediction (sequence length = 60)
-            sequence_length = 60
+            # Load sequence length from model metadata
+            metadata_path = '/root/AIFX_v2/ml_engine/models/trained/profitable_stage1_metadata.json'
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+            sequence_length = metadata['architecture']['sequence_length']
+            logger.info(f"Model sequence length: {sequence_length}")
+
+            # Take last N candles for prediction
             if len(scaled_features) >= sequence_length:
                 features_sequence = scaled_features[-sequence_length:]
                 # Reshape to (1, sequence_length, num_features) for LSTM
@@ -430,23 +439,26 @@ async def compare_versions_raw(request: ComparisonRequest):
         if 'timestamp' in df.columns and df['timestamp'].notna().all():
             df = df.sort_values('timestamp')
 
-        # Calculate indicators and prepare features (same preprocessing logic)
-        df = calculate_all_indicators(df)
-
-        # Load features from model config
+        # Load features and calculate indicators (same as predict_raw)
         import json
         features_path = '/root/AIFX_v2/ml_engine/models/trained/profitable_selected_features.json'
         with open(features_path, 'r') as f:
             features_config = json.load(f)
         expected_features = features_config['features']
 
-        available_features = [col for col in expected_features if col in df.columns]
-        df_features = df[available_features].dropna()
+        df = calculate_model_indicators(df, features_list=expected_features)
+        df_features = df[expected_features].copy()
 
-        if len(df_features) < 60:
+        # Load model metadata for sequence length
+        metadata_path = '/root/AIFX_v2/ml_engine/models/trained/profitable_stage1_metadata.json'
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+        sequence_length = metadata['architecture']['sequence_length']
+
+        if len(df_features) < sequence_length:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Insufficient data. Need 60+ candles, got {len(df_features)}"
+                detail=f"Insufficient data. Need {sequence_length}+ candles, got {len(df_features)}"
             )
 
         # Load scaler and prepare
@@ -455,7 +467,6 @@ async def compare_versions_raw(request: ComparisonRequest):
         scaler = joblib.load(scaler_path)
         scaled_features = scaler.transform(df_features.values)
 
-        sequence_length = 60
         features_sequence = scaled_features[-sequence_length:]
         market_data = features_sequence.reshape(1, sequence_length, -1)
 
