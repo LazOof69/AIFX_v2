@@ -11,6 +11,7 @@
 
 const cron = require('node-cron');
 const mlEngineService = require('./mlEngineService');
+const discordNotificationService = require('./discordNotificationService');
 const logger = require('../utils/logger');
 
 // Define currency pairs and timeframes to monitor
@@ -177,8 +178,18 @@ class SignalMonitoringService {
         // Save to database
         await this.saveSignal(signal);
 
-        // TODO: Send Discord notification
-        // await discordNotificationService.sendSignal(signal);
+        // Send Discord notification
+        const notificationResult = await discordNotificationService.sendSignalNotification(signal);
+
+        if (notificationResult.success) {
+          if (notificationResult.skipped) {
+            logger.info(`⏭️  Signal notification skipped (${notificationResult.reason}): ${signal.pair} ${signal.timeframe}`);
+          } else {
+            logger.info(`📤 Discord notification sent: ${signal.pair} ${signal.timeframe} ${signal.signal}`);
+          }
+        } else {
+          logger.error(`❌ Discord notification failed: ${notificationResult.error}`);
+        }
 
         logger.info(`✅ Signal processed: ${signal.pair} ${signal.timeframe} ${signal.signal}`);
       } catch (error) {
@@ -216,7 +227,7 @@ class SignalMonitoringService {
   /**
    * Start the monitoring service (cron job every 15 minutes)
    */
-  start() {
+  async start() {
     if (this.cronJob) {
       logger.warn('Monitoring service is already running');
       return;
@@ -226,6 +237,16 @@ class SignalMonitoringService {
     logger.info(`   Monitoring pairs: ${MONITORING_CONFIG.pairs.join(', ')}`);
     logger.info(`   Monitoring timeframes: ${MONITORING_CONFIG.timeframes.join(', ')}`);
     logger.info(`   Schedule: Every 15 minutes`);
+
+    // Initialize Discord notification service
+    try {
+      logger.info('📡 Initializing Discord notification service...');
+      await discordNotificationService.initialize();
+      logger.info('✅ Discord notification service ready');
+    } catch (error) {
+      logger.error('⚠️  Failed to initialize Discord service, notifications will be disabled:', error.message);
+      logger.warn('   Monitoring will continue without Discord notifications');
+    }
 
     // Cron pattern: Run every 15 minutes
     // Format: '*/15 * * * *' = Every 15 minutes
@@ -245,11 +266,18 @@ class SignalMonitoringService {
   /**
    * Stop the monitoring service
    */
-  stop() {
+  async stop() {
     if (this.cronJob) {
       this.cronJob.stop();
       this.cronJob = null;
       logger.info('🛑 Signal Monitoring Service stopped');
+    }
+
+    // Disconnect Discord service
+    try {
+      await discordNotificationService.disconnect();
+    } catch (error) {
+      logger.error('Error disconnecting Discord service:', error);
     }
   }
 
