@@ -12,10 +12,12 @@ const UserTradingHistory = require('./UserTradingHistory');
 const PositionMonitoring = require('./PositionMonitoring');
 
 // Discord automation models (imported from discord_bot folder)
-const UserDiscordSettings = require('../../../discord_bot/models/UserDiscordSettings')(sequelize);
-const SignalNotification = require('../../../discord_bot/models/SignalNotification')(sequelize);
-const UserTrade = require('../../../discord_bot/models/UserTrade')(sequelize);
-const TradeUpdate = require('../../../discord_bot/models/TradeUpdate')(sequelize);
+// TODO: These models are not currently used by the backend services
+// Uncomment when Discord-based position tracking is implemented
+// const UserDiscordSettings = require('../../../discord_bot/models/UserDiscordSettings')(sequelize);
+// const SignalNotification = require('../../../discord_bot/models/SignalNotification')(sequelize);
+// const UserTrade = require('../../../discord_bot/models/UserTrade')(sequelize);
+// const TradeUpdate = require('../../../discord_bot/models/TradeUpdate')(sequelize);
 
 // Establish model relationships
 
@@ -96,67 +98,68 @@ PositionMonitoring.belongsTo(UserTradingHistory, {
 
 /**
  * Discord Automation Relationships
+ * TODO: Uncomment when Discord models are enabled
  */
 
 // User -> UserDiscordSettings (One-to-One)
-User.hasOne(UserDiscordSettings, {
-  foreignKey: 'userId',
-  as: 'discordSettings',
-  onDelete: 'CASCADE',
-});
+// User.hasOne(UserDiscordSettings, {
+//   foreignKey: 'userId',
+//   as: 'discordSettings',
+//   onDelete: 'CASCADE',
+// });
 
-UserDiscordSettings.belongsTo(User, {
-  foreignKey: 'userId',
-  as: 'user',
-});
+// UserDiscordSettings.belongsTo(User, {
+//   foreignKey: 'userId',
+//   as: 'user',
+// });
 
 // User -> SignalNotification (One-to-Many)
-User.hasMany(SignalNotification, {
-  foreignKey: 'userId',
-  as: 'signalNotifications',
-  onDelete: 'CASCADE',
-});
+// User.hasMany(SignalNotification, {
+//   foreignKey: 'userId',
+//   as: 'signalNotifications',
+//   onDelete: 'CASCADE',
+// });
 
-SignalNotification.belongsTo(User, {
-  foreignKey: 'userId',
-  as: 'user',
-});
+// SignalNotification.belongsTo(User, {
+//   foreignKey: 'userId',
+//   as: 'user',
+// });
 
 // User -> UserTrade (One-to-Many)
-User.hasMany(UserTrade, {
-  foreignKey: 'userId',
-  as: 'trades',
-  onDelete: 'CASCADE',
-});
+// User.hasMany(UserTrade, {
+//   foreignKey: 'userId',
+//   as: 'trades',
+//   onDelete: 'CASCADE',
+// });
 
-UserTrade.belongsTo(User, {
-  foreignKey: 'userId',
-  as: 'user',
-});
+// UserTrade.belongsTo(User, {
+//   foreignKey: 'userId',
+//   as: 'user',
+// });
 
 // SignalNotification -> UserTrade (One-to-One)
-SignalNotification.hasOne(UserTrade, {
-  foreignKey: 'signalNotificationId',
-  as: 'trade',
-  onDelete: 'SET NULL',
-});
+// SignalNotification.hasOne(UserTrade, {
+//   foreignKey: 'signalNotificationId',
+//   as: 'trade',
+//   onDelete: 'SET NULL',
+// });
 
-UserTrade.belongsTo(SignalNotification, {
-  foreignKey: 'signalNotificationId',
-  as: 'signal',
-});
+// UserTrade.belongsTo(SignalNotification, {
+//   foreignKey: 'signalNotificationId',
+//   as: 'signal',
+// });
 
 // UserTrade -> TradeUpdate (One-to-Many)
-UserTrade.hasMany(TradeUpdate, {
-  foreignKey: 'tradeId',
-  as: 'updates',
-  onDelete: 'CASCADE',
-});
+// UserTrade.hasMany(TradeUpdate, {
+//   foreignKey: 'tradeId',
+//   as: 'updates',
+//   onDelete: 'CASCADE',
+// });
 
-TradeUpdate.belongsTo(UserTrade, {
-  foreignKey: 'tradeId',
-  as: 'trade',
-});
+// TradeUpdate.belongsTo(UserTrade, {
+//   foreignKey: 'tradeId',
+//   as: 'trade',
+// });
 
 // Export all models and sequelize instance
 module.exports = {
@@ -167,9 +170,9 @@ module.exports = {
   UserPreferences,
   UserTradingHistory,
   PositionMonitoring,
-  // Discord automation models
-  UserDiscordSettings,
-  SignalNotification,
-  UserTrade,
-  TradeUpdate,
+  // Discord automation models (commented out - not currently used)
+  // UserDiscordSettings,
+  // SignalNotification,
+  // UserTrade,
+  // TradeUpdate,
 };

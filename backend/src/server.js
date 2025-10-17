@@ -7,6 +7,7 @@ const { app, server } = require('./app');
 const { testConnection, syncDatabase } = require('./config/database');
 const { handleUnhandledRejection, handleUncaughtException } = require('./middleware/errorHandler');
 const monitoringService = require('./services/monitoringService');
+const signalMonitoringService = require('./services/signalMonitoringService');
 
 // Handle uncaught exceptions
 process.on('uncaughtException', handleUncaughtException);
@@ -53,6 +54,11 @@ const startServer = async () => {
       console.log('🔄 Starting position monitoring service...');
       monitoringService.startMonitoring();
       console.log('✅ Position monitoring service started (checks every 60 seconds)');
+
+      // Start signal monitoring service (Discord notifications)
+      console.log('🔄 Starting signal monitoring service...');
+      signalMonitoringService.start();
+      console.log('✅ Signal monitoring service started (checks every 15 minutes)');
     });
 
   } catch (error) {
@@ -62,12 +68,15 @@ const startServer = async () => {
 };
 
 // Graceful shutdown handler
-const gracefulShutdown = () => {
+const gracefulShutdown = async () => {
   console.log('\n⏳ Graceful shutdown initiated...');
 
-  // Stop monitoring service
+  // Stop monitoring services
   console.log('🛑 Stopping position monitoring service...');
   monitoringService.stopMonitoring();
+
+  console.log('🛑 Stopping signal monitoring service...');
+  await signalMonitoringService.stop();
 
   // Close server
   server.close(() => {
