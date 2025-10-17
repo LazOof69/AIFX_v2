@@ -119,6 +119,8 @@ const MarketData = sequelize.define('MarketData', {
 }, {
   tableName: 'market_data',
   underscored: true, // Database will use snake_case column names
+  timestamps: true, // Enable created_at and updated_at
+  paranoid: false, // Disable soft deletes (no deleted_at column)
   indexes: [
     {
       unique: true,

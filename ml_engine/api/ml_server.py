@@ -407,12 +407,74 @@ async def general_exception_handler(request, exc):
     }
 
 
+# Import reversal prediction modules
+try:
+    from model_manager import ModelManager
+    from prediction_service import PredictionService
+    from ab_testing import ABTestingFramework
+    from reversal_api import router as reversal_router
+
+    # Initialize model manager, prediction service, and A/B testing
+    model_manager = ModelManager()
+    prediction_service = None
+    ab_framework = ABTestingFramework()
+
+    # Mount reversal API router
+    app.include_router(reversal_router)
+    logger.info("✅ Reversal prediction API routes mounted")
+except ImportError as e:
+    logger.warning(f"⚠️ Could not load reversal prediction modules: {e}")
+    model_manager = None
+    prediction_service = None
+    ab_framework = None
+
+
 # Startup and shutdown events
 @app.on_event("startup")
 async def startup_event():
+    global prediction_service
+
+    logger.info("="*80)
     logger.info("ML Engine API starting up...")
+    logger.info("="*80)
     logger.info(f"Environment: {config.get('environment', 'development')}")
-    logger.info(f"Model loaded: {predictor.model is not None}")
+    logger.info(f"Legacy model loaded: {predictor.model is not None}")
+
+    # Load reversal detection models
+    if model_manager:
+        logger.info("\n### Loading Reversal Detection Models ###")
+        if model_manager.auto_load_best_version():
+            prediction_service = PredictionService(model_manager)
+            # Attach to router for dependency injection
+            reversal_router.prediction_service = prediction_service
+
+            active_version = model_manager.get_active_version()
+            logger.info(f"✅ Active reversal model: {active_version.version} ({active_version.name})")
+            logger.info(f"   - Stage 1: {'✅ Loaded' if active_version.stage1_model else '❌ Not loaded'}")
+            logger.info(f"   - Stage 2: {'✅ Loaded' if active_version.stage2_model else '❌ Not loaded'}")
+            logger.info(f"   - Threshold: {active_version.threshold}")
+        else:
+            logger.warning("⚠️ Failed to load reversal detection models")
+
+    # Initialize A/B testing framework
+    if ab_framework:
+        logger.info("\n### Initializing A/B Testing Framework ###")
+        # Attach to router for dependency injection
+        reversal_router.ab_framework = ab_framework
+        logger.info(f"✅ A/B Testing Framework initialized")
+
+        # List existing experiments
+        experiments = ab_framework.list_experiments()
+        if experiments:
+            logger.info(f"   - {len(experiments)} existing experiment(s)")
+            for exp in experiments:
+                logger.info(f"     • {exp['experiment_id']}: {exp['name']} ({'Active' if exp['active'] else 'Inactive'})")
+        else:
+            logger.info(f"   - No existing experiments")
+
+    logger.info("="*80)
+    logger.info("✅ ML Engine API startup complete")
+    logger.info("="*80)
 
 
 @app.on_event("shutdown")

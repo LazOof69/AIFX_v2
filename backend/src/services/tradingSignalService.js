@@ -41,8 +41,11 @@ class TradingSignalService {
       // Perform technical analysis
       const analysis = technicalAnalysis.getComprehensiveAnalysis(marketData, userPreferences);
 
-      // Get ML prediction if available
-      const mlPrediction = await this.getMLPrediction(pair, timeframe, marketData);
+      // Get ML prediction if available (pass userId for A/B testing)
+      const mlPrediction = await this.getMLPrediction(pair, timeframe, marketData, {
+        userId: userId,
+        useReversalAPI: true
+      });
 
       // Merge ML prediction with technical analysis
       let finalSignal = analysis.overallSignal;
@@ -383,9 +386,10 @@ class TradingSignalService {
    * @param {string} pair - Currency pair
    * @param {string} timeframe - Timeframe
    * @param {Object} marketData - Market data object
+   * @param {Object} options - Additional options (userId for A/B testing, version, etc.)
    * @returns {Promise<Object|null>} - ML prediction result or null if ML is disabled/failed
    */
-  async getMLPrediction(pair, timeframe, marketData) {
+  async getMLPrediction(pair, timeframe, marketData, options = {}) {
     if (!process.env.ML_API_ENABLED || process.env.ML_API_ENABLED === 'false') {
       logger.debug('ML API is disabled');
       return null;
@@ -393,6 +397,8 @@ class TradingSignalService {
 
     try {
       logger.info(`Requesting ML prediction for ${pair} from ${process.env.ML_API_URL}`);
+
+      const { userId, version, useReversalAPI = true } = options;
 
       // Convert market data to ML API format
       const mlData = marketData.timeSeries.map(candle => ({
@@ -404,23 +410,57 @@ class TradingSignalService {
         volume: parseFloat(candle.volume || 0)
       }));
 
-      const response = await axios.post(`${process.env.ML_API_URL}/predict`, {
+      // Choose API endpoint
+      let endpoint = '/predict';
+      let requestBody = {
         pair: pair,
         timeframe: timeframe,
         data: mlData,
         add_indicators: true
-      }, {
+      };
+
+      // Use new reversal prediction API if available
+      if (useReversalAPI) {
+        endpoint = '/reversal/predict';
+        requestBody = {
+          pair: pair,
+          timeframe: timeframe,
+          data: mlData,
+          version: version || null // Allow model version selection
+        };
+      }
+
+      const response = await axios.post(`${process.env.ML_API_URL}${endpoint}`, requestBody, {
         timeout: 10000 // 10 second timeout
       });
 
       if (response.data && response.data.success) {
-        logger.info(`ML prediction received for ${pair}: ${response.data.data.prediction}`);
-        return response.data.data;
+        const prediction = response.data.data;
+        logger.info(`ML prediction received for ${pair}: ${prediction.signal} (confidence: ${prediction.confidence})`);
+
+        // Format response to match expected format
+        return {
+          prediction: prediction.signal, // 'hold', 'long', or 'short'
+          confidence: prediction.confidence,
+          factors: {
+            technical: prediction.stage1_prob || 0.5,
+            sentiment: 0.5, // Placeholder
+            pattern: prediction.stage2_prob || 0.5
+          },
+          model_version: prediction.model_version,
+          timestamp: prediction.timestamp
+        };
       } else {
         logger.warn(`ML prediction failed for ${pair}: ${response.data?.error || 'Unknown error'}`);
         return null;
       }
     } catch (error) {
+      // If reversal API fails, fallback to legacy API
+      if (options.useReversalAPI && error.response?.status === 404) {
+        logger.warn('Reversal API not available, falling back to legacy API');
+        return this.getMLPrediction(pair, timeframe, marketData, { ...options, useReversalAPI: false });
+      }
+
       logger.error('ML prediction failed:', error.message);
       return null;
     }
