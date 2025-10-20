@@ -238,14 +238,21 @@ class SignalMonitoringService {
     logger.info(`   Monitoring timeframes: ${MONITORING_CONFIG.timeframes.join(', ')}`);
     logger.info(`   Schedule: Every 15 minutes`);
 
-    // Initialize Discord notification service
-    try {
-      logger.info('📡 Initializing Discord notification service...');
-      await discordNotificationService.initialize();
-      logger.info('✅ Discord notification service ready');
-    } catch (error) {
-      logger.error('⚠️  Failed to initialize Discord service, notifications will be disabled:', error.message);
-      logger.warn('   Monitoring will continue without Discord notifications');
+    // Initialize Discord notification service (if enabled)
+    const discordEnabled = process.env.DISCORD_ENABLED !== 'false';
+
+    if (discordEnabled) {
+      try {
+        logger.info('📡 Initializing Discord notification service...');
+        await discordNotificationService.initialize();
+        logger.info('✅ Discord notification service ready');
+      } catch (error) {
+        logger.error('⚠️  Failed to initialize Discord service, notifications will be disabled:', error.message);
+        logger.warn('   Monitoring will continue without Discord notifications');
+      }
+    } else {
+      logger.info('⏭️  Discord notification service disabled (DISCORD_ENABLED=false)');
+      logger.warn('   Signal monitoring will run but notifications will not be sent');
     }
 
     // Cron pattern: Run every 15 minutes

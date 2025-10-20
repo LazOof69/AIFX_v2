@@ -124,7 +124,9 @@ const PositionMonitoring = sequelize.define('PositionMonitoring', {
   },
 }, {
   tableName: 'position_monitoring',
-  timestamps: false, // Using custom timestamp field
+  timestamps: true, // Enable timestamps for createdAt
+  updatedAt: false, // Only use createdAt, not updatedAt
+  paranoid: false, // Disable soft deletes (no deletedAt column)
   underscored: false, // Database uses camelCase column names
   indexes: [
     {

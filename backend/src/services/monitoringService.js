@@ -151,8 +151,14 @@ class MonitoringService {
     try {
       logger.debug(`Monitoring position ${position.id}: ${position.pair} ${position.action} @ ${position.entryPrice}`);
 
-      // 1. Get current market price
-      const quote = await forexService.getQuote(position.pair);
+      // 1. Get current market price (use mock if enabled)
+      let quote;
+      if (process.env.USE_MOCK_PRICES === 'true') {
+        quote = this._generateMockQuote(position);
+        logger.debug(`Using mock price for ${position.pair}: ${quote.data.price} (source: mock)`);
+      } else {
+        quote = await forexService.getQuote(position.pair);
+      }
 
       // Handle null response from forex service (API limits, errors, etc.)
       if (!quote || !quote.data || !quote.data.price) {
@@ -232,6 +238,66 @@ class MonitoringService {
   }
 
   /**
+   * Generate mock quote for testing (when USE_MOCK_PRICES=true)
+   * @private
+   * @param {Object} position - Position data
+   * @returns {Object} - Mock quote in same format as forexService.getQuote()
+   */
+  _generateMockQuote(position) {
+    const entryPrice = parseFloat(position.entryPrice);
+
+    // Define realistic volatility ranges for each pair (in price units)
+    const volatility = {
+      'EUR/USD': 0.0015,  // ±15 pips
+      'USD/JPY': 0.15,    // ±15 pips (JPY pair uses 2 decimals)
+      'EUR/JPY': 0.20     // ±20 pips
+    };
+
+    const range = volatility[position.pair] || 0.0010;
+
+    // Calculate holding duration to add time-based drift
+    const holdingMinutes = this.calculateHoldingDuration(position.openedAt);
+    const daysFraction = holdingMinutes / 1440; // Days since opened
+
+    // Add slight bias based on position direction and holding time
+    // Simulate market having slight upward drift for buys, downward for sells
+    let bias = 0;
+    if (position.action === 'buy') {
+      // Buy positions: 55% chance to be in profit
+      bias = 0.05 * range * daysFraction; // Slight upward drift over time
+    } else {
+      // Sell positions: 55% chance to be in profit
+      bias = -0.05 * range * daysFraction; // Slight downward drift over time
+    }
+
+    // Generate random price movement within range
+    const randomMove = (Math.random() - 0.5) * range * 2;
+    const currentPrice = entryPrice + bias + randomMove;
+
+    // Determine decimal places based on pair
+    const decimals = position.pair.includes('JPY') ? 3 : 5;
+
+    // Calculate bid/ask spread (typically 0.5-1.5 pips)
+    const spread = position.pair.includes('JPY') ? 0.015 : 0.00015;
+
+    return {
+      success: true,
+      data: {
+        pair: position.pair,
+        price: currentPrice.toFixed(decimals),
+        bid: (currentPrice - spread / 2).toFixed(decimals),
+        ask: (currentPrice + spread / 2).toFixed(decimals),
+        timestamp: new Date().toISOString(),
+        source: 'mock',
+        high: (currentPrice + range * 0.3).toFixed(decimals),
+        low: (currentPrice - range * 0.3).toFixed(decimals),
+      },
+      error: null,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  /**
    * Calculate unrealized P&L for a position
    * @private
    * @param {Object} position - Position data
@@ -243,13 +309,19 @@ class MonitoringService {
     let pnlPips = 0;
     let pnlPercentage = 0;
 
+    // Determine pip multiplier based on currency pair
+    // JPY pairs: 1 pip = 0.01 (2nd decimal place)
+    // Other pairs: 1 pip = 0.0001 (4th decimal place)
+    const isJPYPair = position.pair.includes('JPY');
+    const pipMultiplier = isJPYPair ? 100 : 10000;
+
     if (position.action === 'buy') {
       // Long position: profit if price goes up
-      pnlPips = (currentPrice - entryPrice) * 10000; // Convert to pips (4 decimal places)
+      pnlPips = (currentPrice - entryPrice) * pipMultiplier;
       pnlPercentage = ((currentPrice - entryPrice) / entryPrice) * 100;
     } else if (position.action === 'sell') {
       // Short position: profit if price goes down
-      pnlPips = (entryPrice - currentPrice) * 10000; // Convert to pips
+      pnlPips = (entryPrice - currentPrice) * pipMultiplier;
       pnlPercentage = ((entryPrice - currentPrice) / entryPrice) * 100;
     }
 
@@ -690,8 +762,15 @@ class MonitoringService {
       trendStrength,
     } = monitoringData;
 
+    // Convert Sequelize Decimal types to JavaScript numbers
+    const pnlPips = parseFloat(unrealizedPnlPips) || 0;
+    const pnlPercentage = parseFloat(unrealizedPnlPercentage) || 0;
+    const confidence = parseFloat(recommendationConfidence) || 0;
+    const reversalProb = reversalProbability ? parseFloat(reversalProbability) : null;
+    const trendStr = trendStrength ? parseFloat(trendStrength) : null;
+
     const levelEmoji = ['🚨', '⚠️', 'ℹ️', '📊'][level - 1] || 'ℹ️';
-    const pnlEmoji = unrealizedPnlPercentage > 0 ? '💚' : unrealizedPnlPercentage < 0 ? '🔴' : '⚪';
+    const pnlEmoji = pnlPercentage > 0 ? '💚' : pnlPercentage < 0 ? '🔴' : '⚪';
 
     let title = '';
     let priority = '';
@@ -722,14 +801,14 @@ class MonitoringService {
         action: action.toUpperCase(),
         entryPrice,
         currentPrice,
-        unrealizedPnl: `${unrealizedPnlPips > 0 ? '+' : ''}${unrealizedPnlPips.toFixed(1)} pips (${unrealizedPnlPercentage > 0 ? '+' : ''}${unrealizedPnlPercentage.toFixed(2)}%)`,
+        unrealizedPnl: `${pnlPips > 0 ? '+' : ''}${pnlPips.toFixed(1)} pips (${pnlPercentage > 0 ? '+' : ''}${pnlPercentage.toFixed(2)}%)`,
         emoji: pnlEmoji,
       },
       analysis: {
         recommendation: recommendation.toUpperCase(),
-        confidence: `${(recommendationConfidence * 100).toFixed(0)}%`,
-        reversalProbability: reversalProbability ? `${(reversalProbability * 100).toFixed(0)}%` : 'N/A',
-        trendStrength: trendStrength ? `${(trendStrength * 100).toFixed(0)}%` : 'N/A',
+        confidence: `${(confidence * 100).toFixed(0)}%`,
+        reversalProbability: reversalProb ? `${(reversalProb * 100).toFixed(0)}%` : 'N/A',
+        trendStrength: trendStr ? `${(trendStr * 100).toFixed(0)}%` : 'N/A',
         reasoning,
       },
       riskWarning:
