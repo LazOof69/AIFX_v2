@@ -209,6 +209,20 @@ class ModelManager:
         )
         self.register_version(v31)
 
+        # Version 3.2 - Real yfinance Data (38 Features)
+        v32 = ModelVersion(
+            version='v3.2',
+            name='Real Market Data Detector',
+            description='Trained on real yfinance data with 38 comprehensive technical indicators',
+            stage1_path=str(self.models_dir / 'reversal_mode1_model.h5'),
+            stage2_path=None,  # Stage 2 not yet trained on real data
+            scaler_path=str(self.models_dir / 'reversal_mode1_scaler.pkl'),
+            features_path=str(self.models_dir / 'reversal_mode1_features.json'),
+            metadata_path=str(self.models_dir / 'reversal_mode1_metadata.json'),
+            threshold=0.5  # Default threshold, can be optimized later
+        )
+        self.register_version(v32)
+
         logger.info(f"Registered {len(self.versions)} model versions")
 
     def register_version(self, version: ModelVersion):
@@ -284,18 +298,24 @@ class ModelManager:
     def auto_load_best_version(self) -> bool:
         """
         Automatically load the best performing version
-        Currently defaults to v3.1 (Profitable Logic)
+        Currently defaults to v3.2 (Real Market Data)
 
         Returns:
             bool: True if successful, False otherwise
         """
         logger.info("Auto-loading best model version...")
 
-        # Try v3.1 first (best performance)
+        # Try v3.2 first (trained on real yfinance data)
+        if self.load_version('v3.2'):
+            logger.info("✅ Loaded v3.2 (Real Market Data - 38 features)")
+            return True
+
+        # Fallback to v3.1
+        logger.warning("v3.2 not available, falling back to v3.1")
         if self.load_version('v3.1'):
             return True
 
-        # Fallback to v3.0
+        # Final fallback to v3.0
         logger.warning("v3.1 not available, falling back to v3.0")
         return self.load_version('v3.0')
 
