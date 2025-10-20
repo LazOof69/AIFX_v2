@@ -6,6 +6,7 @@
  * - EUR/USD 1h, EUR/USD 15min
  * - USD/JPY 1h, USD/JPY 15min
  *
+ * Updated: 2025-10-20 - Changed from hourly to 15-minute intervals
  * Created: 2025-10-17
  */
 
@@ -236,7 +237,7 @@ class SignalMonitoringService {
     logger.info('🚀 Starting Signal Monitoring Service');
     logger.info(`   Monitoring pairs: ${MONITORING_CONFIG.pairs.join(', ')}`);
     logger.info(`   Monitoring timeframes: ${MONITORING_CONFIG.timeframes.join(', ')}`);
-    logger.info(`   Schedule: Every hour at :00`);
+    logger.info(`   Schedule: Every 15 minutes`);
 
     // Initialize Discord notification service (if enabled)
     const discordEnabled = process.env.DISCORD_ENABLED !== 'false';
@@ -255,10 +256,10 @@ class SignalMonitoringService {
       logger.warn('   Signal monitoring will run but notifications will not be sent');
     }
 
-    // Cron pattern: Run every hour at minute 0
-    // Format: '0 * * * *' = Every hour at :00
-    // This reduces unnecessary checks while still catching meaningful signals
-    this.cronJob = cron.schedule('0 * * * *', async () => {
+    // Cron pattern: Run every 15 minutes
+    // Format: '*/15 * * * *' = Every 15 minutes (at :00, :15, :30, :45)
+    // This provides more frequent signal checks for better trading opportunities
+    this.cronJob = cron.schedule('*/15 * * * *', async () => {
       await this.runCheck();
     });
 

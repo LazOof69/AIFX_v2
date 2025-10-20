@@ -7,6 +7,7 @@ const { app, server } = require('./app');
 const { testConnection, syncDatabase } = require('./config/database');
 const { handleUnhandledRejection, handleUncaughtException } = require('./middleware/errorHandler');
 const monitoringService = require('./services/monitoringService');
+const marketDataCollector = require('./services/marketDataCollector');
 const signalMonitoringService = require('./services/signalMonitoringService');
 
 // Handle uncaught exceptions
@@ -50,6 +51,11 @@ const startServer = async () => {
         console.log('🔧 Development mode: Database auto-sync enabled');
       }
 
+      // Start market data collector service (Phase 3 - Data Collection)
+      console.log('🔄 Starting market data collector service...');
+      marketDataCollector.start();
+      console.log('✅ Market data collector service started (collects every 15 minutes)');
+
       // Start position monitoring service (Phase 3)
       console.log('🔄 Starting position monitoring service...');
       monitoringService.startMonitoring();
@@ -72,6 +78,9 @@ const gracefulShutdown = async () => {
   console.log('\n⏳ Graceful shutdown initiated...');
 
   // Stop monitoring services
+  console.log('🛑 Stopping market data collector service...');
+  await marketDataCollector.stop();
+
   console.log('🛑 Stopping position monitoring service...');
   monitoringService.stopMonitoring();
 
