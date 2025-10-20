@@ -111,8 +111,9 @@ class DiscordNotificationService {
 
     if (lastSent) {
       const minutesSinceLastSent = (Date.now() - lastSent) / 1000 / 60;
-      // Consider duplicate if same signal sent within 30 minutes
-      if (minutesSinceLastSent < 30) {
+      // Consider duplicate if same signal sent within 4 hours (240 minutes)
+      // This prevents spamming the same signal every 15 minutes
+      if (minutesSinceLastSent < 240) {
         return true;
       }
     }
@@ -190,7 +191,19 @@ class DiscordNotificationService {
     // Add contributing factors if available
     if (signal.factors) {
       const factorsText = Object.entries(signal.factors)
-        .map(([key, value]) => `• ${key}: ${(value * 100).toFixed(1)}%`)
+        .map(([key, value]) => {
+          // Handle different value types properly
+          if (typeof value === 'boolean') {
+            return `• ${key}: ${value ? '✅' : '❌'}`;
+          } else if (typeof value === 'number') {
+            return `• ${key}: ${(value * 100).toFixed(1)}%`;
+          } else if (value === null || value === undefined) {
+            return `• ${key}: N/A`;
+          } else {
+            // For strings like 'long', 'short'
+            return `• ${key}: ${value}`;
+          }
+        })
         .join('\n');
 
       embed.addFields({

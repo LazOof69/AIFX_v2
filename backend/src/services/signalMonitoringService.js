@@ -236,7 +236,7 @@ class SignalMonitoringService {
     logger.info('🚀 Starting Signal Monitoring Service');
     logger.info(`   Monitoring pairs: ${MONITORING_CONFIG.pairs.join(', ')}`);
     logger.info(`   Monitoring timeframes: ${MONITORING_CONFIG.timeframes.join(', ')}`);
-    logger.info(`   Schedule: Every 15 minutes`);
+    logger.info(`   Schedule: Every hour at :00`);
 
     // Initialize Discord notification service (if enabled)
     const discordEnabled = process.env.DISCORD_ENABLED !== 'false';
@@ -255,9 +255,10 @@ class SignalMonitoringService {
       logger.warn('   Signal monitoring will run but notifications will not be sent');
     }
 
-    // Cron pattern: Run every 15 minutes
-    // Format: '*/15 * * * *' = Every 15 minutes
-    this.cronJob = cron.schedule('*/15 * * * *', async () => {
+    // Cron pattern: Run every hour at minute 0
+    // Format: '0 * * * *' = Every hour at :00
+    // This reduces unnecessary checks while still catching meaningful signals
+    this.cronJob = cron.schedule('0 * * * *', async () => {
       await this.runCheck();
     });
 
