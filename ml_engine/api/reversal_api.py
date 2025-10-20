@@ -39,6 +39,106 @@ def get_current_timestamp() -> str:
     return datetime.now(GMT_PLUS_8).isoformat()
 
 
+def get_active_model_config(service: 'PredictionService') -> Dict[str, Any]:
+    """
+    Get configuration from active model version
+
+    Dynamically loads paths and settings from the currently active model,
+    ensuring API preprocessing matches the loaded model's requirements.
+
+    Supports both flat and nested metadata formats for compatibility:
+    - v3.2: flat structure with sequence_length at root level
+    - v3.1: nested structure with architecture.sequence_length
+
+    Args:
+        service: PredictionService instance
+
+    Returns:
+        dict: Configuration with:
+            - version: Model version string
+            - features_path: Path to features JSON
+            - metadata_path: Path to metadata JSON
+            - scaler_path: Path to scaler PKL
+            - features_list: List of feature names
+            - sequence_length: LSTM sequence length
+            - metadata: Full metadata dict
+
+    Raises:
+        HTTPException: If active model not found or config invalid
+    """
+    active_version = service.model_manager.get_active_version()
+
+    if not active_version:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No active model version loaded"
+        )
+
+    logger.info(f"Loading config from active model: {active_version.version}")
+
+    config = {
+        'version': active_version.version,
+        'features_path': active_version.features_path,
+        'metadata_path': active_version.metadata_path,
+        'scaler_path': active_version.scaler_path
+    }
+
+    # Load features list
+    try:
+        import json
+        with open(config['features_path'], 'r') as f:
+            features_data = json.load(f)
+            # Handle both dict and list formats
+            if isinstance(features_data, dict):
+                config['features_list'] = features_data.get('features', features_data)
+            else:
+                config['features_list'] = features_data
+
+        logger.info(f"  ✅ Loaded {len(config['features_list'])} features from {active_version.version}")
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Features file not found: {config['features_path']}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load features: {str(e)}"
+        )
+
+    # Load metadata (support both flat and nested structures)
+    try:
+        with open(config['metadata_path'], 'r') as f:
+            metadata = json.load(f)
+
+            # Try nested structure first (v3.1 format)
+            if 'architecture' in metadata:
+                config['sequence_length'] = metadata['architecture']['sequence_length']
+                logger.info(f"  📐 Sequence length: {config['sequence_length']} (nested format)")
+            # Fall back to flat structure (v3.2 format)
+            elif 'sequence_length' in metadata:
+                config['sequence_length'] = metadata['sequence_length']
+                logger.info(f"  📐 Sequence length: {config['sequence_length']} (flat format)")
+            else:
+                raise ValueError("Metadata missing sequence_length field")
+
+            config['metadata'] = metadata
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Metadata file not found: {config['metadata_path']}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load metadata: {str(e)}"
+        )
+
+    logger.info(f"  ✅ Config loaded for {active_version.version}: {len(config['features_list'])} features, seq_len={config['sequence_length']}")
+
+    return config
+
+
 # Initialize router
 router = APIRouter(prefix="/reversal", tags=["Reversal Prediction"])
 
@@ -270,13 +370,10 @@ async def predict_reversal_raw(request: ReversalPredictionRequest):
 
         logger.info(f"DataFrame created with {len(df)} rows")
 
-        # Load model's feature configuration
-        import json
-        features_path = '/root/AIFX_v2/ml_engine/models/trained/profitable_selected_features.json'
-        with open(features_path, 'r') as f:
-            features_config = json.load(f)
-        expected_features = features_config['features']
-        logger.info(f"Model requires {len(expected_features)} features: {expected_features}")
+        # Get configuration from active model (supports v3.1, v3.2, etc.)
+        config = get_active_model_config(service)
+        expected_features = config['features_list']
+        logger.info(f"Model {config['version']} requires {len(expected_features)} features")
 
         # Calculate ONLY the technical indicators needed by the model
         # This optimized function only drops ~50 rows (max lookback) instead of 200+
@@ -306,11 +403,8 @@ async def predict_reversal_raw(request: ReversalPredictionRequest):
         # Select features for model
         df_features = df[expected_features].copy()
 
-        # Load minimum required data from model metadata
-        metadata_path = '/root/AIFX_v2/ml_engine/models/trained/profitable_stage1_metadata.json'
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
-        min_sequence_length = metadata['architecture']['sequence_length']
+        # Use minimum sequence length from active model config
+        min_sequence_length = config['sequence_length']
 
         if len(df_features) < min_sequence_length:
             raise HTTPException(
@@ -320,24 +414,18 @@ async def predict_reversal_raw(request: ReversalPredictionRequest):
 
         logger.info(f"✅ Preprocessing complete: {len(df_features)} rows available for prediction")
 
-        # Load scaler and prepare features
+        # Load scaler and prepare features from active model config
         try:
-            # Use the profitable model's scaler
-            scaler_path = '/root/AIFX_v2/ml_engine/models/trained/profitable_feature_scaler.pkl'
-
             import joblib
-            scaler = joblib.load(scaler_path)
-            logger.info(f"Loaded scaler from {scaler_path}")
+            scaler = joblib.load(config['scaler_path'])
+            logger.info(f"Loaded scaler from {config['scaler_path']}")
 
             # Scale features
             scaled_features = scaler.transform(df_features.values)
             logger.info(f"Features scaled: {scaled_features.shape}")
 
-            # Load sequence length from model metadata
-            metadata_path = '/root/AIFX_v2/ml_engine/models/trained/profitable_stage1_metadata.json'
-            with open(metadata_path, 'r') as f:
-                metadata = json.load(f)
-            sequence_length = metadata['architecture']['sequence_length']
+            # Use sequence length from config
+            sequence_length = config['sequence_length']
             logger.info(f"Model sequence length: {sequence_length}")
 
             # Take last N candles for prediction
@@ -439,21 +527,15 @@ async def compare_versions_raw(request: ComparisonRequest):
         if 'timestamp' in df.columns and df['timestamp'].notna().all():
             df = df.sort_values('timestamp')
 
-        # Load features and calculate indicators (same as predict_raw)
-        import json
-        features_path = '/root/AIFX_v2/ml_engine/models/trained/profitable_selected_features.json'
-        with open(features_path, 'r') as f:
-            features_config = json.load(f)
-        expected_features = features_config['features']
+        # Get configuration from active model (same as predict_raw)
+        config = get_active_model_config(service)
+        expected_features = config['features_list']
 
         df = calculate_model_indicators(df, features_list=expected_features)
         df_features = df[expected_features].copy()
 
-        # Load model metadata for sequence length
-        metadata_path = '/root/AIFX_v2/ml_engine/models/trained/profitable_stage1_metadata.json'
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
-        sequence_length = metadata['architecture']['sequence_length']
+        # Use sequence length from active model config
+        sequence_length = config['sequence_length']
 
         if len(df_features) < sequence_length:
             raise HTTPException(
@@ -461,10 +543,9 @@ async def compare_versions_raw(request: ComparisonRequest):
                 detail=f"Insufficient data. Need {sequence_length}+ candles, got {len(df_features)}"
             )
 
-        # Load scaler and prepare
+        # Load scaler and prepare from active model config
         import joblib
-        scaler_path = '/root/AIFX_v2/ml_engine/models/trained/profitable_feature_scaler.pkl'
-        scaler = joblib.load(scaler_path)
+        scaler = joblib.load(config['scaler_path'])
         scaled_features = scaler.transform(df_features.values)
 
         features_sequence = scaled_features[-sequence_length:]

@@ -122,13 +122,12 @@ def calculate_model_indicators(df, features_list=None):
     """
     Calculate ONLY the technical indicators needed by the model
 
-    This function is optimized for the profitable reversal model v3.1 which uses 12 features.
-    Maximum lookback period is 50 (sma_50), so it only requires ~60 candles of data
-    instead of 200+ needed by calculate_all_indicators().
+    Supports both v3.1 (12 features) and v3.2 (38 features) models.
+    Dynamically calculates only the features specified in features_list.
 
     Args:
-        df: DataFrame with OHLC data (open, high, low, close)
-        features_list: List of feature names to calculate. If None, uses default 12 features.
+        df: DataFrame with OHLC data (open, high, low, close, volume)
+        features_list: List of feature names to calculate. If None, uses default v3.1 features.
 
     Returns:
         DataFrame with selected technical indicators added
@@ -143,48 +142,94 @@ def calculate_model_indicators(df, features_list=None):
             'atr_14', 'stoch_k', 'adx_14'
         ]
 
-    # Calculate only requested indicators
-    if 'sma_20' in features_list:
-        df['sma_20'] = calculate_sma(df, 20)
+    # Price-based features (returns and log_returns)
+    if 'returns' in features_list:
+        df['returns'] = df['close'].pct_change()
 
-    if 'sma_50' in features_list:
-        df['sma_50'] = calculate_sma(df, 50)
+    if 'log_returns' in features_list:
+        df['log_returns'] = np.log(df['close'] / df['close'].shift(1))
 
-    if 'ema_12' in features_list:
-        df['ema_12'] = calculate_ema(df, 12)
+    # Simple Moving Averages - all periods
+    for period in [5, 10, 20, 50, 100, 200]:
+        if f'sma_{period}' in features_list:
+            df[f'sma_{period}'] = calculate_sma(df, period)
 
-    if 'ema_26' in features_list:
-        df['ema_26'] = calculate_ema(df, 26)
+    # Exponential Moving Averages - all periods
+    for period in [5, 10, 12, 20, 26, 50, 100, 200]:
+        if f'ema_{period}' in features_list:
+            df[f'ema_{period}'] = calculate_ema(df, period)
 
-    if 'rsi_14' in features_list:
-        df['rsi_14'] = calculate_rsi(df, 14)
+    # Bollinger Bands (support both naming conventions)
+    if any(x in features_list for x in ['bb_upper_20', 'bb_lower_20', 'bb_width_20', 'bb_upper', 'bb_middle', 'bb_lower', 'bb_width']):
+        bb_upper, bb_middle, bb_lower = calculate_bollinger_bands(df, period=20)
 
-    if any(x in features_list for x in ['macd', 'macd_signal', 'macd_histogram']):
-        macd, signal, histogram = calculate_macd(df)
-        df['macd'] = macd
-        df['macd_signal'] = signal
-        df['macd_histogram'] = histogram
+        # v3.2 naming convention
+        df['bb_upper_20'] = bb_upper
+        df['bb_lower_20'] = bb_lower
+        df['bb_width_20'] = (bb_upper - bb_lower) / bb_middle
 
-    if 'bb_width' in features_list or any(x in features_list for x in ['bb_upper', 'bb_middle', 'bb_lower']):
-        bb_upper, bb_middle, bb_lower = calculate_bollinger_bands(df)
+        # v3.1 naming convention (backwards compatibility)
         df['bb_upper'] = bb_upper
         df['bb_middle'] = bb_middle
         df['bb_lower'] = bb_lower
         df['bb_width'] = bb_upper - bb_lower
 
+    # RSI - multiple periods
+    if 'rsi_14' in features_list:
+        df['rsi_14'] = calculate_rsi(df, 14)
+
+    if 'rsi_28' in features_list:
+        df['rsi_28'] = calculate_rsi(df, 28)
+
+    # MACD (support both naming conventions)
+    if any(x in features_list for x in ['macd', 'macd_signal', 'macd_hist', 'macd_histogram']):
+        macd, signal, histogram = calculate_macd(df)
+        df['macd'] = macd
+        df['macd_signal'] = signal
+        df['macd_hist'] = histogram          # v3.2 naming
+        df['macd_histogram'] = histogram     # v3.1 naming (backwards compatibility)
+
+    # ATR
     if 'atr_14' in features_list:
         df['atr_14'] = calculate_atr(df, 14)
 
+    # Stochastic Oscillator
     if 'stoch_k' in features_list or 'stoch_d' in features_list:
         stoch_k, stoch_d = calculate_stochastic(df)
         df['stoch_k'] = stoch_k
         df['stoch_d'] = stoch_d
 
+    # Volume indicators
+    if 'volume_sma_20' in features_list:
+        df['volume_sma_20'] = df['volume'].rolling(window=20).mean()
+
+    if 'volume_ratio' in features_list:
+        volume_sma = df['volume'].rolling(window=20).mean()
+        df['volume_ratio'] = df['volume'] / (volume_sma + 1e-10)
+
+    # Price momentum
+    for period in [5, 10, 20]:
+        if f'momentum_{period}' in features_list:
+            df[f'momentum_{period}'] = df['close'] / df['close'].shift(period) - 1
+
+    # Volatility (using returns)
+    if any(f'volatility_{period}' in features_list for period in [10, 20, 30]):
+        # Calculate returns if not already present
+        if 'returns' not in df.columns:
+            returns = df['close'].pct_change()
+        else:
+            returns = df['returns']
+
+        for period in [10, 20, 30]:
+            if f'volatility_{period}' in features_list:
+                df[f'volatility_{period}'] = returns.rolling(window=period).std()
+
+    # ADX (v3.1 only)
     if 'adx_14' in features_list:
         df['adx_14'] = calculate_adx(df, 14)
 
     # Drop rows with NaN values (from indicator calculations)
-    # With max lookback of 50, this should only remove ~50 rows instead of 200+
+    # Max lookback is 200 (sma_200/ema_200), so this may remove ~200 rows for v3.2
     df = df.dropna()
 
     return df
