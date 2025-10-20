@@ -34,7 +34,7 @@ const config = {
     define: {
       timestamps: true,
       underscored: true,
-      paranoid: true, // Enable soft deletes
+      paranoid: false, // Disable soft deletes (no deleted_at column in DB)
     },
   },
   test: {
@@ -58,7 +58,7 @@ const config = {
     define: {
       timestamps: true,
       underscored: true,
-      paranoid: true,
+      paranoid: false, // Disable soft deletes (no deleted_at column in DB)
     },
   },
   production: {
@@ -85,7 +85,7 @@ const config = {
     define: {
       timestamps: true,
       underscored: true,
-      paranoid: true,
+      paranoid: false, // Disable soft deletes (no deleted_at column in DB)
     },
   },
 };

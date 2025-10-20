@@ -1,0 +1,56 @@
+{
+  "model_name": "Direction Classifier Stage 2 (Profitable Logic)",
+  "version": "3.1",
+  "created_at": "2025-10-20T05:34:03.474167",
+  "training_duration_seconds": 39.195539,
+  "architecture": {
+    "sequence_length": 20,
+    "features": [
+      "close",
+      "high",
+      "low",
+      "sma_20",
+      "ema_12",
+      "rsi_14",
+      "macd",
+      "macd_signal",
+      "bb_middle",
+      "bb_width",
+      "atr_14",
+      "adx_14"
+    ],
+    "num_features": 12,
+    "lstm_units": [
+      48,
+      24
+    ],
+    "dense_units": [
+      16
+    ],
+    "dropout_rate": 0.3,
+    "l2_regularization": 0.0001
+  },
+  "training": {
+    "epochs_trained": 21,
+    "batch_size": 16,
+    "optimizer": "Adam",
+    "learning_rate": 0.001,
+    "loss": "binary_crossentropy"
+  },
+  "data": {
+    "train_samples": 1066,
+    "val_samples": 121,
+    "test_samples": 143,
+    "train_short": 525,
+    "train_long": 541,
+    "test_short": 77,
+    "test_long": 66
+  },
+  "metrics": {
+    "test_loss": 0.6911791563034058,
+    "test_accuracy": 0.6153846383094788,
+    "test_precision": 0.7200000286102295,
+    "test_recall": 0.27272728085517883,
+    "test_auc": 0.662042498588562
+  }
+}
