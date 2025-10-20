@@ -1,7 +1,7 @@
 # AIFX v2 開發任務清單
 
-**最後更新**: 2025-10-13
-**當前階段**: Phase 3 - 交易生命週期管理系統 v3.0 (Week 1 進行中)
+**最後更新**: 2025-10-20
+**當前階段**: Phase 3 - 交易生命週期管理系統 v3.0 (核心功能已完成)
 
 ---
 
@@ -23,13 +23,13 @@
 |------|------|------|----------|
 | **Phase 1**: 基礎系統建設 | ✅ 完成 | 100% | 2025-09-30 |
 | **Phase 2**: ML v1.0 + v2.0 | ✅ 完成 | 100% | 2025-10-12 |
-| **Phase 3**: 交易生命週期 v3.0 | 🔄 進行中 | **25%** | - |
+| **Phase 3**: 交易生命週期 v3.0 | 🔄 進行中 | **65%** | - |
 
 **Phase 3 詳細進度**:
 - Week 1 (資料庫+後端): **100%** ✅ (15/15 任務完成)
-- Week 2 (ML v3.0): 0% (數據準備已完成)
-- Week 3 (ML API): 0%
-- Week 4 (Discord+前端): 0%
+- Week 2 (ML v3.0 Reversal): **100%** ✅ (Stage 1+2 完成)
+- Week 3 (ML API 集成): **85%** ✅ (API已集成並運行)
+- Week 4 (Discord+前端): **40%** 🔄 (Discord完成80%, 前端0%)
 
 ---
 
@@ -329,7 +329,116 @@
 
 ---
 
-### Week 2: ML v3.0 模型開發（7-10 天）
+### Week 2-4: 實際完成工作（2025-10-17 至 2025-10-20）✅
+
+**注意**: 以下工作與原Week 2-4計劃不同，採用了更實用的反轉檢測方法
+
+#### ML Engine: Two-Stage Reversal Detection (v3.1) ✅ 100%
+
+**完成時間**: 2025-10-17 至 2025-10-20
+**提交記錄**: `ea5fbfc`, `742a764`, `f605499`, `4a08998`, `2c2821c`, `1527f0f`
+
+- [x] ✅ **Stage 1: Reversal Detection Model** (反轉檢測)
+  - 使用 Profitable Logic 標註（而非 Swing Points）
+  - 模型架構: LSTM (64→32 units, 0.3 dropout)
+  - 訓練數據: 1,194 樣本 (perfectly balanced)
+  - **性能指標**:
+    - Test Accuracy: 78.32%
+    - Test Precision: 80.65%
+    - **Test Recall: 79.02%** ⭐ (最重要指標)
+    - Test AUC: 0.8601
+  - 模型文件: `profitable_reversal_detector_stage1.h5`
+  - Metadata: `profitable_stage1_metadata.json`
+
+- [x] ✅ **Stage 2: Direction Classifier** (方向分類)
+  - 使用 Profitable Logic 標註 (long=1, short=0)
+  - 模型架構: LSTM (48→24 units, 0.3 dropout)
+  - 訓練數據: 1,066 樣本 (525 short, 541 long)
+  - **性能指標**:
+    - Test Accuracy: 61.54%
+    - Test Precision: 72.00% (高精確度)
+    - Test Recall: 27.27% (保守預測)
+    - Test AUC: 0.6620
+  - 模型文件: `profitable_stage2_*.h5`
+  - Training script: `retrain_stage2_profitable.py`
+
+- [x] ✅ **Feature Engineering** (12 Core Features)
+  - Technical indicators: SMA(20,50), EMA(12,26), RSI(14)
+  - MACD系列: MACD, Signal, Histogram
+  - Bollinger Bands: BB Width
+  - Volatility: ATR(14), ADX(14)
+  - Stochastic: Stoch K
+  - Feature selection: `profitable_selected_features.json`
+  - Scaler: `profitable_feature_scaler.pkl`
+
+- [x] ✅ **ML API Integration** (FastAPI Endpoints)
+  - Endpoint: `POST /reversal/predict_raw`
+  - 自動預處理: OHLCV → Indicators → Scaling → Prediction
+  - Model versioning: v3.0, v3.1 支持
+  - A/B Testing framework: 實驗管理系統
+  - Health check: `GET /health`
+
+#### Discord Bot 增強功能 ✅ 80%
+
+**完成時間**: 2025-10-20
+**提交記錄**: `2c2821c`, `1527f0f`
+
+- [x] ✅ **User Mapping Service** (Discord→Backend用戶映射)
+  - 自動創建backend帳號 (User + UserPreferences + UserDiscordSettings)
+  - Discord ID → User ID 映射
+  - 新文件: `discord_bot/services/userMappingService.js` (268行)
+  - 新模型: `backend/src/models/UserDiscordSettings.js` (94行)
+
+- [x] ✅ **Position Management Commands**
+  - `/position open` - 開倉記錄 (支持價格驗證)
+  - `/position list` - 查看持倉 (顯示完整UUID)
+  - `/position close` - 平倉記錄 (支持部分平倉 1-100%)
+  - 增強文件: `discord_bot/commands/position.js` (+200行)
+
+- [x] ✅ **Price Validation** (6 Major Currency Pairs)
+  - EUR/USD: 0.9000-1.3000 (5 decimals)
+  - GBP/USD: 1.0000-1.5000 (5 decimals)
+  - USD/JPY: 100.00-160.00 (3 decimals)
+  - AUD/USD, USD/CAD, USD/CHF
+  - 用戶友好錯誤提示
+
+- [x] ✅ **Signal Monitoring Service** (自動信號監控)
+  - Cron schedule: 每小時整點執行 (改自15分鐘)
+  - 監控貨幣對: EUR/USD, USD/JPY
+  - 時間框架: 1h (15min數據不足)
+  - 去重邏輯: 相同信號4小時內不重複 (改自30分鐘)
+  - 文件: `backend/src/services/signalMonitoringService.js`
+
+- [x] ✅ **Discord Notification Service** (Discord通知)
+  - Rich embed 格式化修復
+  - Factors display 類型處理 (boolean/string/number)
+  - 修復前: `reversal_detected: 100%`, `direction: NaN%`
+  - 修復後: `reversal_detected: ✅`, `direction: short`
+  - 文件: `backend/src/services/discordNotificationService.js`
+
+- [ ] ⏸️ **前端組件** (未開始)
+  - PositionMonitor.jsx (0%)
+  - TradingSignals.jsx (0%)
+  - Dashboard.jsx 更新 (0%)
+
+#### 測試與驗證 ✅
+
+- [x] ✅ User mapping 測試通過
+- [x] ✅ Price validation 測試通過
+- [x] ✅ Partial position close 測試通過
+- [x] ✅ Discord signal notification 格式測試通過
+- [x] ✅ ML Stage 1+2 預測測試通過
+- [x] ✅ End-to-end 信號流程測試通過
+
+**總結**:
+- **實際完成**: 65% 整體進度
+- **核心功能**: Discord Bot + ML Reversal Detection ✅ 可用
+- **待完成**: 前端UI (0%), 15分鐘數據收集
+- **狀態**: 系統已可投入使用，用戶可通過Discord管理倉位並接收信號
+
+---
+
+### Week 2: ML v3.0 模型開發（原計劃 - 延後）
 
 #### 2.1 數據準備（重新標註）
 
