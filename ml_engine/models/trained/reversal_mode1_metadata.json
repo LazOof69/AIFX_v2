@@ -3,6 +3,6 @@
   "mode": "mode1_reversal_detection",
   "sequence_length": 20,
   "num_features": 38,
-  "trained_at": "2025-10-14T08:31:13.704797",
+  "trained_at": "2025-10-20T11:13:37.822542",
   "total_parameters": 39972
 }
