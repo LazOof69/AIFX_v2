@@ -64,7 +64,8 @@ echo ""
 echo "This script will install and configure all required services."
 echo "Estimated time: 15-30 minutes"
 echo ""
-read -p "Press ENTER to continue or Ctrl+C to cancel..."
+log_info "Starting automated setup in 2 seconds..."
+sleep 2
 echo ""
 
 # Set project root
