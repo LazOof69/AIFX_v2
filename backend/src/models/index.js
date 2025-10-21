@@ -11,6 +11,11 @@ const UserPreferences = require('./UserPreferences');
 const UserTradingHistory = require('./UserTradingHistory');
 const PositionMonitoring = require('./PositionMonitoring');
 
+// ML Continuous Learning models
+const ModelTrainingLog = require('./ModelTrainingLog');
+const ModelVersion = require('./ModelVersion');
+const ModelABTest = require('./ModelABTest');
+
 // Discord automation models (imported from discord_bot folder)
 // TODO: These models are not currently used by the backend services
 // Uncomment when Discord-based position tracking is implemented
@@ -97,6 +102,32 @@ PositionMonitoring.belongsTo(UserTradingHistory, {
 });
 
 /**
+ * ML Continuous Learning Relationships
+ */
+
+// ModelVersion -> ModelTrainingLog (Many-to-One)
+ModelVersion.belongsTo(ModelTrainingLog, {
+  foreignKey: 'trainingLogId',
+  as: 'trainingLog',
+});
+
+ModelTrainingLog.hasMany(ModelVersion, {
+  foreignKey: 'trainingLogId',
+  as: 'versions',
+});
+
+// TradingSignal -> ModelABTest (Many-to-One)
+TradingSignal.belongsTo(ModelABTest, {
+  foreignKey: 'abTestId',
+  as: 'abTest',
+});
+
+ModelABTest.hasMany(TradingSignal, {
+  foreignKey: 'abTestId',
+  as: 'signals',
+});
+
+/**
  * Discord Automation Relationships
  * TODO: Uncomment when Discord models are enabled
  */
@@ -170,6 +201,10 @@ module.exports = {
   UserPreferences,
   UserTradingHistory,
   PositionMonitoring,
+  // ML Continuous Learning models
+  ModelTrainingLog,
+  ModelVersion,
+  ModelABTest,
   // Discord automation models (commented out - not currently used)
   // UserDiscordSettings,
   // SignalNotification,
