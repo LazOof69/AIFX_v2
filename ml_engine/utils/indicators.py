@@ -228,9 +228,24 @@ def calculate_model_indicators(df, features_list=None):
     if 'adx_14' in features_list:
         df['adx_14'] = calculate_adx(df, 14)
 
-    # Drop rows with NaN values (from indicator calculations)
-    # Max lookback is 200 (sma_200/ema_200), so this may remove ~200 rows for v3.2
-    df = df.dropna()
+    # Handle NaN values intelligently
+    # Strategy: Use forward fill, backward fill, then fill remaining with 0
+    initial_rows = len(df)
+
+    # Use newer pandas methods (ffill/bfill instead of fillna with method parameter)
+    df = df.ffill().bfill()
+
+    # Fill any remaining NaN values with 0 (for columns that are entirely NaN)
+    df = df.fillna(0)
+
+    rows_after = len(df)
+    rows_dropped = initial_rows - rows_after
+
+    # Log warning if data was lost
+    if rows_dropped > 0:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Dropped {rows_dropped}/{initial_rows} rows ({rows_dropped/initial_rows*100:.1f}%) due to NaN values")
 
     return df
 

@@ -76,7 +76,28 @@ class PredictionService:
 
             # Stage 1: Detect reversal
             stage1_pred = model_version.stage1_model.predict(market_data, verbose=0)
-            has_reversal_prob = float(stage1_pred[0][0])
+
+            # Convert to numpy array if it's a TensorFlow tensor
+            import numpy as np
+            if hasattr(stage1_pred, 'numpy'):
+                stage1_pred = stage1_pred.numpy()
+
+            # Debug: Log the actual type and shape
+            logger.info(f"Stage 1 raw output - type: {type(stage1_pred)}, shape: {getattr(stage1_pred, 'shape', 'N/A')}")
+            logger.info(f"Stage 1 raw output - value: {stage1_pred}")
+
+            # Extract prediction value safely
+            # Model may output a list of arrays (multi-output model) or a single array
+            if isinstance(stage1_pred, list) and len(stage1_pred) > 1:
+                # Multi-output model: use the second output (binary reversal probability)
+                logger.info("Multi-output model detected, using second output")
+                has_reversal_prob = float(stage1_pred[1][0][0])
+            elif isinstance(stage1_pred, list) and len(stage1_pred) == 1:
+                # Single-output wrapped in list
+                has_reversal_prob = float(stage1_pred[0][0][0])
+            else:
+                # Single output (numpy array)
+                has_reversal_prob = float(stage1_pred[0][0])
 
             logger.info(f"Stage 1 prediction: {has_reversal_prob:.4f} (threshold: {model_version.threshold})")
 
