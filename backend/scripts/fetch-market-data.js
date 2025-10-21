@@ -44,7 +44,7 @@ async function main() {
     // Fetch latest data
     console.log('🔄 Fetching latest market data...');
     console.log('   Pairs: EUR/USD, USD/JPY');
-    console.log('   Timeframes: 1h, 15min');
+    console.log('   Timeframes: 1h, 4h, 1d, 1w');
     console.log('');
 
     const results = await marketDataService.fetchLatestData();

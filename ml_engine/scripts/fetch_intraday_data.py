@@ -1,7 +1,7 @@
 """
-Fetch Intraday Forex Data
+Fetch Forex Data for Multiple Timeframes
 
-Purpose: Download 1h and 15min data from yfinance for EUR/USD and USD/JPY
+Purpose: Download 1h, 4h, 1d, 1w data from yfinance for EUR/USD and USD/JPY
 Output: CSV files compatible with market_data table
 """
 
@@ -33,6 +33,35 @@ def fetch_forex_data(pair_symbol, interval, period='60d'):
 
     print(f"  ✅ Received {len(df)} candles")
     return df
+
+def resample_to_4h(df):
+    """
+    Resample 1h data to 4h candles
+
+    Args:
+        df: DataFrame with 1h OHLCV data
+
+    Returns:
+        DataFrame with 4h OHLCV data
+    """
+    if df.empty:
+        return df
+
+    # Make sure index is DatetimeIndex
+    if not isinstance(df.index, pd.DatetimeIndex):
+        df = df.set_index('Datetime' if 'Datetime' in df.columns else 'Date')
+
+    # Resample to 4h
+    df_4h = df.resample('4h').agg({
+        'Open': 'first',
+        'High': 'max',
+        'Low': 'min',
+        'Close': 'last',
+        'Volume': 'sum'
+    }).dropna()
+
+    print(f"  ♻️  Resampled {len(df)} 1h candles → {len(df_4h)} 4h candles")
+    return df_4h
 
 def save_to_csv(df, pair_name, timeframe, output_dir):
     """Save DataFrame to CSV file"""
@@ -86,7 +115,9 @@ def main():
 
     timeframes = {
         '1h': ('1h', '60d'),      # (yfinance_interval, period)
-        '15min': ('15m', '60d')   # yfinance uses '15m', but we store as '15min'
+        '4h': ('1h', '730d'),     # Fetch 1h data and aggregate to 4h
+        '1d': ('1d', '5y'),       # Daily data, 5 years
+        '1w': ('1wk', '10y')      # Weekly data, 10 years
     }
 
     output_dir = '/root/AIFX_v2/ml_engine/data/intraday'
@@ -103,6 +134,10 @@ def main():
             try:
                 df = fetch_forex_data(yf_symbol, yf_interval, period)
                 if df is not None:
+                    # Resample to 4h if needed
+                    if timeframe == '4h' and yf_interval == '1h':
+                        df = resample_to_4h(df)
+
                     filepath = save_to_csv(df, pair_name, timeframe, output_dir)
                     results.append({
                         'pair': pair_name,

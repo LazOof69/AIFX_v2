@@ -99,9 +99,13 @@ async function main() {
     const csvDir = '/root/AIFX_v2/ml_engine/data/intraday';
     const files = [
       { file: 'EURUSD_yfinance_1h.csv', pair: 'EUR/USD', timeframe: '1h' },
-      { file: 'EURUSD_yfinance_15m.csv', pair: 'EUR/USD', timeframe: '15min' },
+      { file: 'EURUSD_yfinance_4h.csv', pair: 'EUR/USD', timeframe: '4h' },
+      { file: 'EURUSD_yfinance_1d.csv', pair: 'EUR/USD', timeframe: '1d' },
+      { file: 'EURUSD_yfinance_1w.csv', pair: 'EUR/USD', timeframe: '1w' },
       { file: 'USDJPY_yfinance_1h.csv', pair: 'USD/JPY', timeframe: '1h' },
-      { file: 'USDJPY_yfinance_15m.csv', pair: 'USD/JPY', timeframe: '15min' }
+      { file: 'USDJPY_yfinance_4h.csv', pair: 'USD/JPY', timeframe: '4h' },
+      { file: 'USDJPY_yfinance_1d.csv', pair: 'USD/JPY', timeframe: '1d' },
+      { file: 'USDJPY_yfinance_1w.csv', pair: 'USD/JPY', timeframe: '1w' }
     ];
 
     const results = [];
@@ -137,8 +141,15 @@ async function main() {
         const newest = new Date(Math.max(...timestamps));
         console.log(`   📅 Date range: ${oldest.toISOString()} to ${newest.toISOString()}`);
 
-        // Calculate cache expiry
-        const expiryMinutes = timeframe === '1h' ? 60 : 15;
+        // Calculate cache expiry based on timeframe
+        const expiryMinutes = {
+          '15min': 15,
+          '1h': 60,
+          '4h': 240,
+          '1d': 1440,
+          '1w': 10080
+        }[timeframe] || 60;
+
         records.forEach(record => {
           record.cacheExpiresAt = new Date(record.timestamp.getTime() + expiryMinutes * 60 * 1000);
         });

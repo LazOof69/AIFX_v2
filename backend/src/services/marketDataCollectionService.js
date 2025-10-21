@@ -2,7 +2,7 @@
  * Market Data Collection Service
  *
  * Purpose: Fetch forex market data from external APIs and store in market_data table
- * Supports: EUR/USD, USD/JPY with 1h and 15min timeframes
+ * Supports: EUR/USD, USD/JPY with 1h, 4h, 1d, 1w timeframes
  *
  * Data Sources:
  * - Primary: Alpha Vantage (5 req/min limit)
@@ -30,7 +30,7 @@ class MarketDataCollectionService {
    */
   async fetchLatestData() {
     const pairs = ['EUR/USD', 'USD/JPY'];
-    const timeframes = ['1h', '15min'];
+    const timeframes = ['1h', '4h', '1d', '1w'];
 
     const results = {
       success: [],

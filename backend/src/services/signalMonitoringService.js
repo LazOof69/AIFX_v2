@@ -2,11 +2,11 @@
  * Signal Monitoring Service
  *
  * Purpose: Automated monitoring service that checks for reversal signals
- * Runs every 15 minutes to check 4 combinations:
- * - EUR/USD 1h, EUR/USD 15min
- * - USD/JPY 1h, USD/JPY 15min
+ * Runs every 15 minutes to check 8 combinations:
+ * - EUR/USD: 1h, 4h, 1d, 1w
+ * - USD/JPY: 1h, 4h, 1d, 1w
  *
- * Updated: 2025-10-20 - Changed from hourly to 15-minute intervals
+ * Updated: 2025-10-21 - Added 4h, 1d, 1w timeframes
  * Created: 2025-10-17
  */
 
@@ -18,7 +18,7 @@ const logger = require('../utils/logger');
 // Define currency pairs and timeframes to monitor
 const MONITORING_CONFIG = {
   pairs: ['EUR/USD', 'USD/JPY'],
-  timeframes: ['1h', '15min']
+  timeframes: ['1h', '4h', '1d', '1w']
 };
 
 /**
