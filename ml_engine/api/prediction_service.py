@@ -86,6 +86,49 @@ class PredictionService:
             logger.info(f"Stage 1 raw output - type: {type(stage1_pred)}, shape: {getattr(stage1_pred, 'shape', 'N/A')}")
             logger.info(f"Stage 1 raw output - value: {stage1_pred}")
 
+            # Check if this is a 3-class classification model (v3.2 style)
+            if isinstance(stage1_pred, list) and len(stage1_pred) >= 1:
+                first_output = stage1_pred[0]
+                # Check if first output has 3 values (hold, long, short)
+                if hasattr(first_output, 'shape') and first_output.shape[-1] == 3:
+                    # v3.2 model: 3-class classification
+                    logger.info("Detected 3-class classification model (v3.2)")
+                    hold_prob = float(first_output[0][0])
+                    long_prob = float(first_output[0][1])
+                    short_prob = float(first_output[0][2])
+
+                    # Get confidence from second output if available
+                    if len(stage1_pred) > 1:
+                        model_confidence = float(stage1_pred[1][0][0])
+                    else:
+                        model_confidence = max(hold_prob, long_prob, short_prob)
+
+                    logger.info(f"Probabilities: hold={hold_prob:.4f}, long={long_prob:.4f}, short={short_prob:.4f}, confidence={model_confidence:.4f}")
+
+                    # Determine signal based on highest probability
+                    if hold_prob > long_prob and hold_prob > short_prob:
+                        signal = 'hold'
+                        confidence = hold_prob
+                    elif long_prob > short_prob:
+                        signal = 'long'
+                        confidence = long_prob
+                    else:
+                        signal = 'short'
+                        confidence = short_prob
+
+                    result = {
+                        'signal': signal,
+                        'confidence': float(confidence),
+                        'stage1_prob': float(max(long_prob, short_prob)),  # Reversal probability
+                        'stage2_prob': float(long_prob if signal == 'long' else short_prob) if signal != 'hold' else None,
+                        'model_version': model_version.version,
+                        'timestamp': datetime.utcnow().isoformat() + 'Z'
+                    }
+
+                    logger.info(f"3-class model result: {result['signal']} (confidence: {result['confidence']:.4f})")
+                    return result
+
+            # Original two-stage logic for other models
             # Extract prediction value safely
             # Model may output a list of arrays (multi-output model) or a single array
             if isinstance(stage1_pred, list) and len(stage1_pred) > 1:
