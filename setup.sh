@@ -163,8 +163,8 @@ EOF
     log_success "Database 'aifx_v2_dev' created"
 fi
 
-# Test connection
-if PGPASSWORD=postgres psql -U postgres -d aifx_v2_dev -c "SELECT 1" > /dev/null 2>&1; then
+# Test connection (use sudo -u postgres to avoid password issues)
+if sudo -u postgres psql -d aifx_v2_dev -c "SELECT 1" > /dev/null 2>&1; then
     log_success "Database connection verified"
 else
     log_error "Database connection failed"
@@ -245,7 +245,7 @@ else
 fi
 
 # Check database tables
-TABLE_COUNT=$(PGPASSWORD=postgres psql -U postgres -d aifx_v2_dev -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';" 2>/dev/null | xargs)
+TABLE_COUNT=$(sudo -u postgres psql -d aifx_v2_dev -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';" 2>/dev/null | xargs)
 
 if [ -n "$TABLE_COUNT" ] && [ "$TABLE_COUNT" -gt 0 ]; then
     log_success "Database has $TABLE_COUNT tables"
@@ -320,7 +320,7 @@ Installed Services:
 
 ✓ Python Virtual Environment
   - Location: $PROJECT_ROOT/ml_engine/venv
-  - Packages: $(source $PROJECT_ROOT/ml_engine/venv/bin/activate && pip list --format=freeze | wc -l)
+  - Packages: $($PROJECT_ROOT/ml_engine/venv/bin/pip list --format=freeze 2>/dev/null | wc -l)
 
 ✓ Node.js Dependencies
   - Backend: $(cd $PROJECT_ROOT/backend && npm list --depth=0 2>&1 | grep -c "├──\|└──")
