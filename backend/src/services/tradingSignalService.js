@@ -26,10 +26,11 @@ class TradingSignalService {
       logger.info(`Generating trading signal for ${pair} on ${timeframe}`);
 
       // Fetch market data
-      const marketData = await forexService.getHistoricalData(pair, {
-        interval: this.mapTimeframeToInterval(timeframe),
-        outputsize: 'compact' // Get ~100 data points
-      });
+      const marketData = await forexService.getHistoricalData(
+        pair,
+        timeframe, // forexService will handle timeframe mapping internally
+        100 // Get ~100 data points
+      );
 
       if (!marketData || !marketData.timeSeries || marketData.timeSeries.length === 0) {
         throw new Error('Insufficient market data for signal generation');
