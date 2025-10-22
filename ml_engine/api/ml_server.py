@@ -3,6 +3,14 @@ ML Server API for AIFX_v2
 FastAPI-based REST API for machine learning predictions and model training
 """
 
+# Fix for libgomp static TLS block error on ARM64
+import os
+import ctypes
+try:
+    ctypes.CDLL('/usr/lib/aarch64-linux-gnu/libgomp.so.1', mode=ctypes.RTLD_GLOBAL)
+except Exception as e:
+    pass  # Ignore if not on ARM64 or libgomp not found
+
 from fastapi import FastAPI, HTTPException, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator
