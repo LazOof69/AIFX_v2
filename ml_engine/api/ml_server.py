@@ -27,6 +27,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models.price_predictor import PricePredictor
 from data_processing.preprocessor import DataPreprocessor, load_data_from_dict
+from data_processing.yfinance_fetcher import YFinanceFetcher
 
 # Configure logging
 logging.basicConfig(
@@ -373,6 +374,47 @@ async def get_model_info():
     }
 
 
+@app.get("/market-data/{pair}", tags=["Market Data"])
+async def get_market_data(
+    pair: str,
+    timeframe: str = '1h',
+    limit: int = 100
+):
+    """
+    Fetch historical market data using yfinance
+
+    - **pair**: Currency pair (e.g., EUR/USD)
+    - **timeframe**: Timeframe (1min, 5min, 15min, 30min, 1h, 4h, 1d, 1w, 1M)
+    - **limit**: Number of candles to fetch (default: 100)
+    """
+    try:
+        logger.info(f"Market data request: {pair}, {timeframe}, limit={limit}")
+
+        result = YFinanceFetcher.fetch_historical_data(pair, timeframe, limit)
+
+        if not result['success']:
+            raise HTTPException(
+                status_code=404,
+                detail=result.get('error', 'Failed to fetch market data')
+            )
+
+        return {
+            "success": True,
+            "data": {
+                "timeSeries": result['timeSeries'],
+                "metadata": result['metadata']
+            },
+            "error": None,
+            "timestamp": get_current_timestamp()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Market data error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/", tags=["Root"])
 async def root():
     """
@@ -387,6 +429,7 @@ async def root():
             "predict": "/predict",
             "train": "/train",
             "model_info": "/model/info",
+            "market_data": "/market-data/{pair}",
             "docs": "/docs"
         },
         "timestamp": get_current_timestamp()
