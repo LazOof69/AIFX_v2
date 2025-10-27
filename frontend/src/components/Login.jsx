@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { authAPI } from '../services/api';
+import { Activity, Mail, Lock, User, LogIn, UserPlus, AlertTriangle, CheckCircle } from 'lucide-react';
 
 /**
  * Login component for user authentication
@@ -56,117 +57,160 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
-      <div className="max-w-md w-full">
+    <div className="min-h-screen flex items-center justify-center px-4">
+      <div className="max-w-md w-full animate-fade-in">
         {/* Logo and Title */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">AIFX</h1>
-          <p className="text-gray-600">AI-Powered Forex Trading Advisory</p>
+          <div className="inline-flex items-center justify-center space-x-3 mb-4">
+            <div className="p-4 bg-gradient-to-br from-primary-500 to-purple-600 rounded-2xl shadow-neon-blue">
+              <Activity className="text-white" size={40} />
+            </div>
+          </div>
+          <h1 className="text-5xl font-black bg-gradient-to-r from-primary-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-3">
+            AIFX
+          </h1>
+          <p className="text-white text-lg font-medium drop-shadow-lg">AI-Powered Forex Trading Advisory</p>
         </div>
 
         {/* Login/Register Form */}
-        <div className="bg-white rounded-lg shadow-xl p-8">
+        <div className="glass-card rounded-2xl shadow-2xl p-8 border border-white/30">
           <div className="mb-6">
-            <div className="flex border-b border-gray-200">
+            <div className="flex gap-2 bg-gray-100 p-1 rounded-xl">
               <button
                 onClick={() => {
                   setIsLogin(true);
                   setError('');
                 }}
-                className={`flex-1 py-3 text-center font-medium transition-colors ${
+                className={`flex-1 py-3 rounded-lg font-bold transition-all duration-300 ${
                   isLogin
-                    ? 'text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-500 hover:text-gray-700'
+                    ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-lg'
+                    : 'text-gray-600 hover:bg-white'
                 }`}
               >
-                Login
+                <div className="flex items-center justify-center space-x-2">
+                  <LogIn size={18} />
+                  <span>Login</span>
+                </div>
               </button>
               <button
                 onClick={() => {
                   setIsLogin(false);
                   setError('');
                 }}
-                className={`flex-1 py-3 text-center font-medium transition-colors ${
+                className={`flex-1 py-3 rounded-lg font-bold transition-all duration-300 ${
                   !isLogin
-                    ? 'text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-500 hover:text-gray-700'
+                    ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-lg'
+                    : 'text-gray-600 hover:bg-white'
                 }`}
               >
-                Register
+                <div className="flex items-center justify-center space-x-2">
+                  <UserPlus size={18} />
+                  <span>Register</span>
+                </div>
               </button>
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             {!isLogin && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-bold text-gray-700 mb-2">
                   Username
                 </label>
-                <input
-                  type="text"
-                  name="username"
-                  value={formData.username}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                  placeholder="Enter your username"
-                />
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <User className="text-gray-400" size={20} />
+                  </div>
+                  <input
+                    type="text"
+                    name="username"
+                    value={formData.username}
+                    onChange={handleChange}
+                    required
+                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all bg-white/50"
+                    placeholder="Enter your username"
+                  />
+                </div>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-bold text-gray-700 mb-2">
                 Email
               </label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                placeholder="Enter your email"
-              />
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Mail className="text-gray-400" size={20} />
+                </div>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  required
+                  className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all bg-white/50"
+                  placeholder="Enter your email"
+                />
+              </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-bold text-gray-700 mb-2">
                 Password
               </label>
-              <input
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                placeholder="Enter your password"
-              />
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Lock className="text-gray-400" size={20} />
+                </div>
+                <input
+                  type="password"
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                  className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all bg-white/50"
+                  placeholder="Enter your password"
+                />
+              </div>
             </div>
 
             {error && (
-              <div className={`p-3 rounded-lg text-sm ${
+              <div className={`flex items-start space-x-3 p-4 rounded-xl text-sm font-medium ${
                 error.includes('successful')
-                  ? 'bg-green-50 text-green-700 border border-green-200'
-                  : 'bg-red-50 text-red-700 border border-red-200'
+                  ? 'bg-green-50 text-green-700 border-2 border-green-200'
+                  : 'bg-red-50 text-red-700 border-2 border-red-200'
               }`}>
-                {error}
+                {error.includes('successful') ? (
+                  <CheckCircle size={20} className="flex-shrink-0 mt-0.5" />
+                ) : (
+                  <AlertTriangle size={20} className="flex-shrink-0 mt-0.5" />
+                )}
+                <span>{error}</span>
               </div>
             )}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+              className="w-full bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white font-bold py-3.5 rounded-xl transition-all duration-300 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95"
             >
-              {loading ? 'Processing...' : isLogin ? 'Login' : 'Register'}
+              {loading ? (
+                <div className="flex items-center justify-center space-x-2">
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                  <span>Processing...</span>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center space-x-2">
+                  {isLogin ? <LogIn size={20} /> : <UserPlus size={20} />}
+                  <span>{isLogin ? 'Sign In' : 'Create Account'}</span>
+                </div>
+              )}
             </button>
           </form>
 
           {isLogin && (
-            <div className="mt-4 text-center">
-              <Link to="/forgot-password" className="text-sm text-blue-600 hover:text-blue-700">
+            <div className="mt-6 text-center">
+              <Link to="/forgot-password" className="text-sm text-primary-600 hover:text-primary-700 font-medium hover:underline">
                 Forgot password?
               </Link>
             </div>
@@ -174,9 +218,14 @@ const Login = () => {
         </div>
 
         {/* Disclaimer */}
-        <div className="mt-6 text-center text-xs text-gray-500">
-          <p>⚠️ Trading forex involves substantial risk of loss.</p>
-          <p>This system provides advisory signals only, not financial advice.</p>
+        <div className="mt-8 glass-card rounded-xl p-4 border border-white/30">
+          <div className="flex items-start space-x-3 text-sm">
+            <AlertTriangle className="text-yellow-500 flex-shrink-0 mt-0.5" size={20} />
+            <div className="text-gray-700">
+              <p className="font-bold text-gray-900 mb-1">Risk Disclaimer</p>
+              <p>Trading forex involves substantial risk of loss. This system provides advisory signals only, not financial advice.</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
