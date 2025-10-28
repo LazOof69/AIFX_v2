@@ -1,278 +1,287 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { marketAPI } from '../services/api';
-import { subscribeToMarketUpdates } from '../services/socket';
+import { tradingAPI, authAPI } from '../services/api';
+import {
+  Activity,
+  TrendingUp,
+  TrendingDown,
+  ArrowUpRight,
+  ArrowDownRight,
+  Clock,
+  Target,
+  Zap,
+  LogOut,
+  Bell,
+  Globe
+} from 'lucide-react';
 
 /**
- * MarketOverview component showing all currency pairs
+ * Simple MarketOverview component showing trading signals as market data
  */
 const MarketOverview = () => {
   const navigate = useNavigate();
-  const [marketData, setMarketData] = useState([]);
+  const [user, setUser] = useState(null);
+  const [signals, setSignals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
-  const [sortBy, setSortBy] = useState('change');
-
-  const majorPairs = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD', 'NZD/USD'];
-  const crossPairs = ['EUR/GBP', 'EUR/JPY', 'GBP/JPY', 'AUD/JPY', 'NZD/JPY', 'EUR/AUD'];
 
   useEffect(() => {
-    loadMarketData();
-
-    // Subscribe to market updates
-    const unsubscribe = subscribeToMarketUpdates((update) => {
-      setMarketData((prev) =>
-        prev.map((item) =>
-          item.pair === update.pair
-            ? { ...item, price: update.price, change: update.change, changePercent: update.changePercent }
-            : item
-        )
-      );
-    });
-
-    // Refresh data every 60 seconds
-    const interval = setInterval(loadMarketData, 60000);
-
-    return () => {
-      unsubscribe();
-      clearInterval(interval);
-    };
+    loadData();
   }, []);
 
-  /**
-   * Load market overview data
-   */
-  const loadMarketData = async () => {
+  const loadData = async () => {
     try {
-      const response = await marketAPI.getOverview();
-      if (response.success) {
-        setMarketData(response.data);
-      }
+      const [userRes, signalsRes] = await Promise.all([
+        authAPI.getProfile(),
+        tradingAPI.getSignals({ limit: 50 }),
+      ]);
+
+      setUser(userRes.data.user);
+      setSignals(signalsRes.data.history || []);
     } catch (error) {
-      console.error('Failed to load market data:', error);
+      console.error('Failed to load data:', error);
+      if (error.response?.status === 401) {
+        navigate('/login');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  /**
-   * Filter and sort market data
-   */
-  const getFilteredData = () => {
-    let filtered = marketData;
-
-    // Apply filter
-    if (filter === 'major') {
-      filtered = marketData.filter((item) => majorPairs.includes(item.pair));
-    } else if (filter === 'cross') {
-      filtered = marketData.filter((item) => crossPairs.includes(item.pair));
+  const handleLogout = async () => {
+    try {
+      await authAPI.logout();
+      navigate('/login');
+    } catch (error) {
+      console.error('Logout failed:', error);
     }
-
-    // Apply sort
-    return filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'change':
-          return Math.abs(b.changePercent || 0) - Math.abs(a.changePercent || 0);
-        case 'gainers':
-          return (b.changePercent || 0) - (a.changePercent || 0);
-        case 'losers':
-          return (a.changePercent || 0) - (b.changePercent || 0);
-        case 'name':
-          return a.pair.localeCompare(b.pair);
-        default:
-          return 0;
-      }
-    });
   };
 
-  /**
-   * Get change color class
-   */
-  const getChangeColor = (change) => {
-    if (change > 0) return 'text-green-600';
-    if (change < 0) return 'text-red-600';
-    return 'text-gray-600';
+  const getFilteredSignals = () => {
+    if (filter === 'all') return signals;
+    return signals.filter(s => (s.signal || s.action) === filter);
   };
 
-  /**
-   * Get change background class
-   */
-  const getChangeBg = (change) => {
-    if (change > 0) return 'bg-green-50';
-    if (change < 0) return 'bg-red-50';
-    return 'bg-gray-50';
-  };
+  const filteredSignals = getFilteredSignals();
+  const buyCount = signals.filter(s => (s.signal || s.action) === 'buy').length;
+  const sellCount = signals.filter(s => (s.signal || s.action) === 'sell').length;
+  const holdCount = signals.filter(s => (s.signal || s.action) === 'hold').length;
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading market data...</p>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center glass-card rounded-2xl p-8 animate-fade-in">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-primary-200 border-t-primary-600 mx-auto mb-4"></div>
+          <p className="text-gray-700 font-medium">Loading market overview...</p>
         </div>
       </div>
     );
   }
 
-  const filteredData = getFilteredData();
-
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200 mb-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="text-gray-600 hover:text-gray-900"
-            >
-              ← Back to Dashboard
-            </button>
-            <h1 className="text-2xl font-bold text-gray-900">Market Overview</h1>
-            <div className="w-32"></div>
+      <header className="glass-card border-b border-white/30 sticky top-0 z-50 backdrop-blur-xl">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-4">
+            <div className="flex items-center space-x-8">
+              <div className="flex items-center space-x-2">
+                <div className="bg-gradient-to-br from-primary-500 to-purple-600 p-2 rounded-xl shadow-lg">
+                  <Activity className="text-white" size={24} />
+                </div>
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-purple-600 bg-clip-text text-transparent">
+                  AIFX
+                </h1>
+              </div>
+              <nav className="hidden md:flex space-x-1">
+                <Link to="/dashboard" className="px-4 py-2 rounded-lg text-gray-700 hover:bg-white/50 font-medium transition">
+                  Dashboard
+                </Link>
+                <Link to="/trading" className="px-4 py-2 rounded-lg text-gray-700 hover:bg-white/50 font-medium transition">
+                  Trading
+                </Link>
+                <Link to="/market" className="px-4 py-2 rounded-lg bg-primary-500 text-white font-medium shadow-md">
+                  Market
+                </Link>
+                <Link to="/settings" className="px-4 py-2 rounded-lg text-gray-700 hover:bg-white/50 font-medium transition">
+                  Settings
+                </Link>
+              </nav>
+            </div>
+            <div className="flex items-center space-x-3">
+              <button className="p-2 rounded-lg hover:bg-white/50 transition relative">
+                <Bell size={20} className="text-gray-700" />
+              </button>
+              <div className="h-8 w-px bg-gray-300"></div>
+              <span className="text-sm text-gray-700 font-medium">Welcome, {user?.username}</span>
+              <button
+                onClick={handleLogout}
+                className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:text-red-600 border border-gray-300 rounded-lg hover:bg-red-50 hover:border-red-300 transition"
+              >
+                <LogOut size={16} />
+                <span>Logout</span>
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Filters */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="glass-card rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <Globe className="text-primary-600" size={32} />
+              <Target className="text-gray-400" size={20} />
+            </div>
+            <h3 className="text-sm font-medium text-gray-600 mb-2">Total Pairs</h3>
+            <p className="text-4xl font-bold bg-gradient-to-r from-primary-600 to-purple-600 bg-clip-text text-transparent">
+              {signals.length}
+            </p>
+          </div>
+
+          <div className="glass-card rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <TrendingUp className="text-green-600" size={32} />
+              <ArrowUpRight className="text-green-500" size={20} />
+            </div>
+            <h3 className="text-sm font-medium text-gray-600 mb-2">Buy Signals</h3>
+            <p className="text-4xl font-bold text-green-600">{buyCount}</p>
+          </div>
+
+          <div className="glass-card rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <TrendingDown className="text-red-600" size={32} />
+              <ArrowDownRight className="text-red-500" size={20} />
+            </div>
+            <h3 className="text-sm font-medium text-gray-600 mb-2">Sell Signals</h3>
+            <p className="text-4xl font-bold text-red-600">{sellCount}</p>
+          </div>
+
+          <div className="glass-card rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <Activity className="text-gray-600" size={32} />
+              <Clock className="text-gray-400" size={20} />
+            </div>
+            <h3 className="text-sm font-medium text-gray-600 mb-2">Hold Signals</h3>
+            <p className="text-4xl font-bold text-gray-600">{holdCount}</p>
+          </div>
+        </div>
+
+        {/* Filter Buttons */}
+        <div className="glass-card rounded-2xl p-4 mb-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Globe className="text-primary-600" size={24} />
+              <h2 className="text-xl font-bold text-gray-800">Market Signals</h2>
+            </div>
             <div className="flex space-x-2">
               <button
                 onClick={() => setFilter('all')}
                 className={`px-4 py-2 rounded-lg font-medium transition ${
                   filter === 'all'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-primary-500 text-white shadow-md'
+                    : 'bg-white/50 text-gray-700 hover:bg-white'
                 }`}
               >
-                All Pairs
+                All ({signals.length})
               </button>
               <button
-                onClick={() => setFilter('major')}
+                onClick={() => setFilter('buy')}
                 className={`px-4 py-2 rounded-lg font-medium transition ${
-                  filter === 'major'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  filter === 'buy'
+                    ? 'bg-green-500 text-white shadow-md'
+                    : 'bg-white/50 text-gray-700 hover:bg-white'
                 }`}
               >
-                Major Pairs
+                Buy ({buyCount})
               </button>
               <button
-                onClick={() => setFilter('cross')}
+                onClick={() => setFilter('sell')}
                 className={`px-4 py-2 rounded-lg font-medium transition ${
-                  filter === 'cross'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  filter === 'sell'
+                    ? 'bg-red-500 text-white shadow-md'
+                    : 'bg-white/50 text-gray-700 hover:bg-white'
                 }`}
               >
-                Cross Pairs
+                Sell ({sellCount})
+              </button>
+              <button
+                onClick={() => setFilter('hold')}
+                className={`px-4 py-2 rounded-lg font-medium transition ${
+                  filter === 'hold'
+                    ? 'bg-gray-500 text-white shadow-md'
+                    : 'bg-white/50 text-gray-700 hover:bg-white'
+                }`}
+              >
+                Hold ({holdCount})
               </button>
             </div>
-
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-            >
-              <option value="change">Most Volatile</option>
-              <option value="gainers">Top Gainers</option>
-              <option value="losers">Top Losers</option>
-              <option value="name">Name (A-Z)</option>
-            </select>
           </div>
         </div>
 
-        {/* Market Data Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-          {filteredData.map((item) => (
-            <Link
-              key={item.pair}
-              to={`/trading/${item.pair}`}
-              className="bg-white rounded-lg shadow hover:shadow-md transition p-6"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-gray-900">{item.pair}</h3>
-                <div className={`px-3 py-1 rounded-full text-sm font-medium ${getChangeBg(item.changePercent)}`}>
-                  {item.trend === 'up' ? '↗' : item.trend === 'down' ? '↘' : '→'}
-                </div>
-              </div>
+        {/* Signals Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredSignals.map((signal) => {
+            const action = (signal.signal || signal.action || 'hold').toLowerCase();
+            const colorClass = action === 'buy' ? 'border-green-500 bg-green-50/50' : action === 'sell' ? 'border-red-500 bg-red-50/50' : 'border-gray-500 bg-gray-50/50';
+            const iconColorClass = action === 'buy' ? 'text-green-600' : action === 'sell' ? 'text-red-600' : 'text-gray-600';
 
-              <div className="mb-3">
-                <div className="text-3xl font-bold text-gray-900">
-                  {item.price?.toFixed(5) || 'N/A'}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-sm">
-                <div>
-                  <span className="text-gray-600">Change: </span>
-                  <span className={`font-semibold ${getChangeColor(item.changePercent)}`}>
-                    {item.changePercent > 0 ? '+' : ''}
-                    {item.changePercent?.toFixed(2)}%
-                  </span>
-                </div>
-                <div className="text-gray-600">
-                  {item.change > 0 ? '+' : ''}
-                  {item.change?.toFixed(5)}
-                </div>
-              </div>
-
-              {item.volume && (
-                <div className="mt-3 pt-3 border-t border-gray-200">
-                  <div className="text-xs text-gray-600">
-                    Volume: <span className="font-medium">{item.volume.toLocaleString()}</span>
+            return (
+              <div key={signal.id} className={`glass-card rounded-2xl p-6 border-2 ${colorClass} hover:shadow-lg transition-all`}>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    {action === 'buy' ? <TrendingUp className={iconColorClass} size={28} /> :
+                     action === 'sell' ? <TrendingDown className={iconColorClass} size={28} /> :
+                     <Activity className={iconColorClass} size={28} />}
+                    <h3 className="text-xl font-bold text-gray-900">{signal.pair}</h3>
+                  </div>
+                  <div className={`px-3 py-1 rounded-full text-sm font-bold uppercase ${
+                    action === 'buy' ? 'bg-green-500 text-white' :
+                    action === 'sell' ? 'bg-red-500 text-white' :
+                    'bg-gray-500 text-white'
+                  }`}>
+                    {action}
                   </div>
                 </div>
-              )}
-            </Link>
-          ))}
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Confidence</span>
+                    <span className="text-lg font-bold text-gray-900">{Math.round((signal.confidence || 0) * 100)}%</span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Timeframe</span>
+                    <span className="text-sm font-semibold text-gray-700">{signal.timeframe || '1hour'}</span>
+                  </div>
+
+                  <div className="flex items-center space-x-2 text-xs text-gray-500">
+                    <Clock size={14} />
+                    <span>{new Date(signal.createdAt || signal.timestamp).toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <Link
+                  to={`/trading/${signal.pair}`}
+                  className="mt-4 flex items-center justify-center space-x-2 w-full py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg font-medium transition shadow-md"
+                >
+                  <span>View Details</span>
+                  <ArrowUpRight size={18} />
+                </Link>
+              </div>
+            );
+          })}
         </div>
 
-        {filteredData.length === 0 && (
-          <div className="bg-white rounded-lg shadow p-12 text-center">
-            <p className="text-gray-500">No market data available</p>
+        {filteredSignals.length === 0 && (
+          <div className="text-center py-12 glass-card rounded-2xl">
+            <Zap className="mx-auto text-gray-400 mb-4" size={48} />
+            <p className="text-gray-500 font-medium">No signals match your filter</p>
           </div>
         )}
-
-        {/* Market Summary */}
-        <div className="bg-white rounded-lg shadow p-6 mb-8">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Market Summary</h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div>
-              <div className="text-sm text-gray-600 mb-1">Total Pairs</div>
-              <div className="text-2xl font-bold text-gray-900">{marketData.length}</div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-600 mb-1">Gainers</div>
-              <div className="text-2xl font-bold text-green-600">
-                {marketData.filter((item) => (item.changePercent || 0) > 0).length}
-              </div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-600 mb-1">Losers</div>
-              <div className="text-2xl font-bold text-red-600">
-                {marketData.filter((item) => (item.changePercent || 0) < 0).length}
-              </div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-600 mb-1">Unchanged</div>
-              <div className="text-2xl font-bold text-gray-600">
-                {marketData.filter((item) => (item.changePercent || 0) === 0).length}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Disclaimer */}
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-8">
-          <p className="text-sm text-yellow-800">
-            ⚠️ <strong>Disclaimer:</strong> Market data is for informational purposes only.
-            Prices may be delayed. Always verify prices with your broker before trading.
-          </p>
-        </div>
-      </div>
+      </main>
     </div>
   );
 };
