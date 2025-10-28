@@ -475,12 +475,86 @@ class TradingSignalService {
    */
   async getSignalHistory(userId, filters = {}) {
     try {
-      // This would query the database in a real implementation
-      // For now, return a placeholder
+      const { sequelize } = require('../config/database');
+      const { QueryTypes } = require('sequelize');
+
       logger.info(`Fetching signal history for user ${userId}`);
 
-      // TODO: Implement database query when models are available
-      return [];
+      // Build SQL query with filters
+      let whereConditions = [];
+      let replacements = {};
+
+      if (filters.pair) {
+        whereConditions.push('pair = :pair');
+        replacements.pair = filters.pair;
+      }
+
+      if (filters.signal) {
+        whereConditions.push('action = :action');
+        replacements.action = filters.signal;
+      }
+
+      if (filters.status) {
+        whereConditions.push('status = :status');
+        replacements.status = filters.status;
+      }
+
+      if (filters.startDate) {
+        whereConditions.push('created_at >= :startDate');
+        replacements.startDate = filters.startDate;
+      }
+
+      if (filters.endDate) {
+        whereConditions.push('created_at <= :endDate');
+        replacements.endDate = filters.endDate;
+      }
+
+      const whereClause = whereConditions.length > 0
+        ? 'WHERE ' + whereConditions.join(' AND ')
+        : '';
+
+      const limit = filters.limit || 50;
+      const offset = filters.offset || 0;
+
+      const query = `
+        SELECT
+          id, pair, action, confidence,
+          entry_price, stop_loss, take_profit,
+          timeframe, status,
+          created_at, updated_at
+        FROM trading_signals
+        ${whereClause}
+        ORDER BY created_at DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `;
+
+      logger.debug(`SQL Query: ${query}`, replacements);
+
+      // Execute raw SQL query
+      const signals = await sequelize.query(query, {
+        replacements,
+        type: QueryTypes.SELECT
+      });
+
+      // Transform database results to match expected format
+      const transformedSignals = signals.map(signal => ({
+        id: signal.id,
+        pair: signal.pair,
+        signal: signal.action, // Map 'action' column to 'signal' field
+        action: signal.action, // Keep both for compatibility
+        confidence: parseFloat(signal.confidence),
+        entryPrice: signal.entry_price ? parseFloat(signal.entry_price) : null,
+        stopLoss: signal.stop_loss ? parseFloat(signal.stop_loss) : null,
+        takeProfit: signal.take_profit ? parseFloat(signal.take_profit) : null,
+        timeframe: signal.timeframe,
+        status: signal.status,
+        timestamp: signal.created_at,
+        createdAt: signal.created_at,
+        updatedAt: signal.updated_at
+      }));
+
+      logger.info(`Found ${transformedSignals.length} signals for user ${userId}`);
+      return transformedSignals;
     } catch (error) {
       logger.error('Error fetching signal history:', error);
       throw error;
