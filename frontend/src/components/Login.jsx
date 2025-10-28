@@ -99,7 +99,7 @@ const Login = () => {
       {/* Main Content */}
       <div className="relative z-10 max-w-md w-full animate-fade-in">
         {/* Logo Section */}
-        <div className="text-center mb-10">
+        <div className="text-center mb-6">
           {/* Icon with Glow */}
           <div className="inline-flex items-center justify-center mb-6 relative">
             <div className="absolute inset-0 bg-gradient-to-r from-primary-500 to-purple-600 rounded-3xl blur-2xl opacity-50 animate-glow"></div>
@@ -148,9 +148,9 @@ const Login = () => {
           <div className="absolute inset-0 bg-gradient-to-r from-primary-500/20 to-purple-500/20 rounded-3xl blur-xl"></div>
 
           {/* Main Card */}
-          <div className="relative backdrop-blur-xl bg-white/10 border-2 border-white/20 rounded-3xl shadow-2xl p-8 hover:border-white/30 transition-all duration-300">
+          <div className="relative backdrop-blur-xl bg-white/10 border-2 border-white/20 rounded-3xl shadow-2xl p-6 hover:border-white/30 transition-all duration-300">
             {/* Tab Switcher */}
-            <div className="mb-8">
+            <div className="mb-6">
               <div className="relative flex gap-2 p-1.5 bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-white/10">
                 <button
                   onClick={() => {
@@ -188,7 +188,7 @@ const Login = () => {
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-4">
               {!isLogin && (
                 <div className="transform transition-all duration-300 animate-slide-down">
                   <label className="block text-sm font-bold text-gray-200 mb-3 flex items-center space-x-2">
@@ -206,7 +206,7 @@ const Login = () => {
                       value={formData.username}
                       onChange={handleChange}
                       required
-                      className="relative w-full pl-13 pr-4 py-4 bg-slate-800/50 border-2 border-white/10 rounded-xl text-white placeholder-gray-500 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/30 outline-none transition-all duration-300 text-lg font-medium hover:border-white/20"
+                      className="relative w-full pl-13 pr-4 py-3 bg-slate-800/50 border-2 border-white/10 rounded-xl text-white placeholder-gray-500 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/30 outline-none transition-all duration-300 text-base font-medium hover:border-white/20"
                       placeholder="Enter your username"
                     />
                   </div>
@@ -229,7 +229,7 @@ const Login = () => {
                     value={formData.email}
                     onChange={handleChange}
                     required
-                    className="relative w-full pl-13 pr-4 py-4 bg-slate-800/50 border-2 border-white/10 rounded-xl text-white placeholder-gray-500 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/30 outline-none transition-all duration-300 text-lg font-medium hover:border-white/20"
+                    className="relative w-full pl-13 pr-4 py-3 bg-slate-800/50 border-2 border-white/10 rounded-xl text-white placeholder-gray-500 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/30 outline-none transition-all duration-300 text-base font-medium hover:border-white/20"
                     placeholder="your@email.com"
                   />
                 </div>
@@ -251,7 +251,7 @@ const Login = () => {
                     value={formData.password}
                     onChange={handleChange}
                     required
-                    className="relative w-full pl-13 pr-4 py-4 bg-slate-800/50 border-2 border-white/10 rounded-xl text-white placeholder-gray-500 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/30 outline-none transition-all duration-300 text-lg font-medium hover:border-white/20"
+                    className="relative w-full pl-13 pr-4 py-3 bg-slate-800/50 border-2 border-white/10 rounded-xl text-white placeholder-gray-500 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/30 outline-none transition-all duration-300 text-base font-medium hover:border-white/20"
                     placeholder="••••••••"
                   />
                 </div>
@@ -281,7 +281,7 @@ const Login = () => {
                 <div className="absolute inset-0 bg-gradient-to-r from-primary-500 to-purple-600 rounded-xl blur-lg opacity-50 group-hover:opacity-75 transition-opacity"></div>
 
                 {/* Button Content */}
-                <div className={`relative flex items-center justify-center space-x-3 px-6 py-4 rounded-xl font-bold text-lg transition-all duration-300 ${
+                <div className={`relative flex items-center justify-center space-x-3 px-6 py-3.5 rounded-xl font-bold text-base transition-all duration-300 ${
                   loading
                     ? 'bg-gradient-to-r from-gray-600 to-gray-700 cursor-not-allowed'
                     : 'bg-gradient-to-r from-primary-500 via-purple-600 to-pink-600 hover:shadow-2xl hover:shadow-primary-500/50 active:scale-95 hover:scale-105'
@@ -317,7 +317,7 @@ const Login = () => {
         </div>
 
         {/* Risk Disclaimer */}
-        <div className="mt-8 backdrop-blur-xl bg-yellow-500/5 border-2 border-yellow-500/30 rounded-2xl p-5 hover:border-yellow-500/50 transition-colors">
+        <div className="mt-6 backdrop-blur-xl bg-yellow-500/5 border-2 border-yellow-500/30 rounded-2xl p-4 hover:border-yellow-500/50 transition-colors">
           <div className="flex items-start space-x-3">
             <AlertTriangle className="text-yellow-400 flex-shrink-0 mt-1 animate-pulse" size={24} />
             <div>
