@@ -101,7 +101,7 @@ export const authAPI = {
    * @returns {Promise} User profile
    */
   getProfile: async () => {
-    return apiClient.get('/auth/profile');
+    return apiClient.get('/auth/me');
   },
 };
 
@@ -119,12 +119,12 @@ export const tradingAPI = {
   },
 
   /**
-   * Get all trading signals
+   * Get all trading signals (using history endpoint)
    * @param {Object} params - Query parameters
    * @returns {Promise} List of trading signals
    */
   getSignals: async (params = {}) => {
-    return apiClient.get('/trading/signals', { params });
+    return apiClient.get('/trading/history', { params });
   },
 
   /**
