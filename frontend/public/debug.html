@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIFX Debug Info</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #0f0;
+        }
+        .status { margin: 10px 0; }
+        .success { color: #0f0; }
+        .error { color: #f00; }
+        button {
+            background: #333;
+            color: #0f0;
+            border: 1px solid #0f0;
+            padding: 10px 20px;
+            cursor: pointer;
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 AIFX Frontend Debug</h1>
+
+    <h2>System Info:</h2>
+    <div id="info"></div>
+
+    <h2>API Tests:</h2>
+    <button onclick="testBackend()">Test Backend Health</button>
+    <button onclick="testLogin()">Test Login API</button>
+    <button onclick="testML()">Test ML Engine</button>
+    <div id="results"></div>
+
+    <script>
+        const info = document.getElementById('info');
+        const results = document.getElementById('results');
+
+        // Display system info
+        info.innerHTML = `
+            <div class="status">URL: ${window.location.href}</div>
+            <div class="status">User Agent: ${navigator.userAgent}</div>
+            <div class="status">Screen: ${window.screen.width}x${window.screen.height}</div>
+            <div class="status">Viewport: ${window.innerWidth}x${window.innerHeight}</div>
+            <div class="status">Time: ${new Date().toISOString()}</div>
+        `;
+
+        async function testBackend() {
+            results.innerHTML += '<div class="status">Testing backend...</div>';
+            try {
+                const res = await fetch('http://localhost:3000/api/v1/health');
+                const data = await res.json();
+                results.innerHTML += `<div class="status success">✅ Backend: ${JSON.stringify(data)}</div>`;
+            } catch (err) {
+                results.innerHTML += `<div class="status error">❌ Backend: ${err.message}</div>`;
+            }
+        }
+
+        async function testLogin() {
+            results.innerHTML += '<div class="status">Testing login API...</div>';
+            try {
+                const res = await fetch('http://localhost:3000/api/v1/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        identifier: 'john@example.com',
+                        password: 'password123'
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    results.innerHTML += `<div class="status success">✅ Login: Success!</div>`;
+                } else {
+                    results.innerHTML += `<div class="status error">❌ Login: ${data.error}</div>`;
+                }
+            } catch (err) {
+                results.innerHTML += `<div class="status error">❌ Login: ${err.message}</div>`;
+            }
+        }
+
+        async function testML() {
+            results.innerHTML += '<div class="status">Testing ML engine...</div>';
+            try {
+                const res = await fetch('http://localhost:8000/health');
+                const data = await res.json();
+                results.innerHTML += `<div class="status success">✅ ML Engine: ${JSON.stringify(data)}</div>`;
+            } catch (err) {
+                results.innerHTML += `<div class="status error">❌ ML Engine: ${err.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>
