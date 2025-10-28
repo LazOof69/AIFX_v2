@@ -52,7 +52,7 @@
         async function testBackend() {
             results.innerHTML += '<div class="status">Testing backend...</div>';
             try {
-                const res = await fetch('http://localhost:3000/api/v1/health');
+                const res = await fetch('/api/v1/health');
                 const data = await res.json();
                 results.innerHTML += `<div class="status success">✅ Backend: ${JSON.stringify(data)}</div>`;
             } catch (err) {
@@ -63,7 +63,7 @@
         async function testLogin() {
             results.innerHTML += '<div class="status">Testing login API...</div>';
             try {
-                const res = await fetch('http://localhost:3000/api/v1/auth/login', {
+                const res = await fetch('/api/v1/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -85,7 +85,7 @@
         async function testML() {
             results.innerHTML += '<div class="status">Testing ML engine...</div>';
             try {
-                const res = await fetch('http://localhost:8000/health');
+                const res = await fetch('/api/v1/ml/health');
                 const data = await res.json();
                 results.innerHTML += `<div class="status success">✅ ML Engine: ${JSON.stringify(data)}</div>`;
             } catch (err) {

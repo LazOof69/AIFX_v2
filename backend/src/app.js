@@ -51,6 +51,8 @@ const corsOptions = {
       'http://localhost:3000',
       'http://144.24.41.178',
       'http://10.0.0.199',
+      'http://168.138.182.181',
+      'http://168.138.182.181:5173',
     ];
 
     // Allow requests with no origin (mobile apps, etc.)
