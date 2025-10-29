@@ -460,10 +460,10 @@ async def general_exception_handler(request, exc):
 
 # Import reversal prediction modules
 try:
-    from model_manager import ModelManager
-    from prediction_service import PredictionService
-    from ab_testing import ABTestingFramework
-    from reversal_api import router as reversal_router
+    from api.model_manager import ModelManager
+    from api.prediction_service import PredictionService
+    from api.ab_testing import ABTestingFramework
+    from api.reversal_api import router as reversal_router
 
     # Initialize model manager, prediction service, and A/B testing
     model_manager = ModelManager()

@@ -22,9 +22,9 @@ import os
 # Add parent directory for data_processing import
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from model_manager import ModelManager
-from prediction_service import PredictionService
-from ab_testing import ABTestingFramework
+from api.model_manager import ModelManager
+from api.prediction_service import PredictionService
+from api.ab_testing import ABTestingFramework
 from data_processing.preprocessor import DataPreprocessor
 from utils.indicators import calculate_model_indicators
 
