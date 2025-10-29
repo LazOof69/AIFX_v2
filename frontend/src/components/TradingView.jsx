@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { tradingAPI, authAPI } from '../services/api';
+import CandlestickChart from './CandlestickChart';
 import {
   Activity,
   TrendingUp,
@@ -276,6 +277,16 @@ const TradingView = () => {
             </p>
           </div>
         )}
+
+        {/* Price Chart with Signals */}
+        <div className="mb-8">
+          <CandlestickChart
+            priceData={[]} // Will use mock data
+            signals={signals.filter(s => s.pair === selectedPair)}
+            pair={selectedPair}
+            timeframe="1h"
+          />
+        </div>
 
         {/* All Signals for this Pair */}
         <div className="glass-card rounded-2xl p-6">
