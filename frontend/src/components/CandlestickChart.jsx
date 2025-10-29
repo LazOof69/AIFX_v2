@@ -39,14 +39,11 @@ const CandlestickChart = ({ priceData = [], signals = [], pair = '', timeframe =
   const [chartData, setChartData] = useState(null);
 
   useEffect(() => {
-    if (!priceData || priceData.length === 0) {
-      // Generate mock data if no real data available
-      const mockData = generateMockData(100);
-      prepareChartData(mockData, signals);
-    } else {
-      prepareChartData(priceData, signals);
-    }
-  }, [priceData, signals]);
+    // Always generate mock data for now (yfinance API unavailable)
+    // TODO: Switch to real data when backend API is ready
+    const mockData = generateMockData(100);
+    prepareChartData(mockData, signals);
+  }, [signals, pair, timeframe]);
 
   /**
    * Generate mock price data for demonstration
