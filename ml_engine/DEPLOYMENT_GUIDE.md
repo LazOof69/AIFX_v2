@@ -119,7 +119,7 @@ curl http://localhost:8000/health
 curl http://localhost/ml/health
 
 # 測試外部訪問
-curl http://144.24.41.178/ml/health
+curl http://168.138.182.181/ml/health
 ```
 
 ### 步驟 5：配置後端整合 ML API
@@ -249,7 +249,7 @@ module.exports = {
 
 - [ ] ML API 服務器運行在 port 8000
 - [ ] `curl http://localhost:8000/health` 返回成功
-- [ ] `curl http://144.24.41.178/ml/health` 返回成功（Apache 代理）
+- [ ] `curl http://168.138.182.181/ml/health` 返回成功（Apache 代理）
 - [ ] 模型已載入（`model_loaded: true`）
 - [ ] 後端 `.env` 配置正確
 - [ ] 後端可以調用 ML API
@@ -319,7 +319,7 @@ cd /root/AIFX_v2/ml_engine
 ## 📈 預期 API 結構（部署完成後）
 
 ```
-http://144.24.41.178/
+http://168.138.182.181/
 ├── /                    → 前端 (React + Vite)
 ├── /api/v1/            → 後端 API (Node.js + Express)
 │   ├── /auth

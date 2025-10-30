@@ -62,7 +62,7 @@ cd /root/AIFX_v2
 
 - **Frontend (用戶界面)**
   - URL: http://localhost:5173
-  - 或: http://144.24.41.178 (如果配置了 Apache)
+  - 或: http://168.138.182.181 (如果配置了 Apache)
 
 - **Backend API**
   - URL: http://localhost:3000/api/v1
