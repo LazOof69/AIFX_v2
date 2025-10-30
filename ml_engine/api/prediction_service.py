@@ -15,7 +15,7 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 import json
 
-from model_manager import ModelManager, ModelVersion
+from api.model_manager import ModelManager, ModelVersion
 
 logger = logging.getLogger(__name__)
 

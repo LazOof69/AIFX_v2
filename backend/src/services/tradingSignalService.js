@@ -422,7 +422,7 @@ class TradingSignalService {
 
       // Use new reversal prediction API if available
       if (useReversalAPI) {
-        endpoint = '/reversal/predict';
+        endpoint = '/reversal/predict_raw';  // Use raw data endpoint for automatic preprocessing
         requestBody = {
           pair: pair,
           timeframe: timeframe,

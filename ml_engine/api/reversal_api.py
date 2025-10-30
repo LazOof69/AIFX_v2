@@ -416,13 +416,24 @@ async def predict_reversal_raw(request: ReversalPredictionRequest):
 
         # Load scaler and prepare features from active model config
         try:
-            import joblib
-            scaler = joblib.load(config['scaler_path'])
-            logger.info(f"Loaded scaler from {config['scaler_path']}")
+            # Try to load scaler if available
+            scaler = None
+            if config.get('scaler_path') and os.path.exists(config['scaler_path']):
+                try:
+                    import joblib
+                    scaler = joblib.load(config['scaler_path'])
+                    logger.info(f"Loaded scaler from {config['scaler_path']}")
+                except Exception as scaler_err:
+                    logger.warning(f"Failed to load scaler: {scaler_err}")
+                    logger.warning("Continuing without scaling (model may have been trained on raw features)")
 
-            # Scale features
-            scaled_features = scaler.transform(df_features.values)
-            logger.info(f"Features scaled: {scaled_features.shape}")
+            # Scale features or use raw features
+            if scaler is not None:
+                scaled_features = scaler.transform(df_features.values)
+                logger.info(f"Features scaled: {scaled_features.shape}")
+            else:
+                scaled_features = df_features.values
+                logger.info(f"Using raw features (no scaling): {scaled_features.shape}")
 
             # Use sequence length from config
             sequence_length = config['sequence_length']
@@ -440,14 +451,10 @@ async def predict_reversal_raw(request: ReversalPredictionRequest):
                     detail=f"Need {sequence_length} candles, got {len(scaled_features)}"
                 )
 
-        except FileNotFoundError:
-            logger.error(f"Scaler file not found at {scaler_path}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Model scaler not found. Please train the model first."
-            )
+        except HTTPException:
+            raise  # Re-raise HTTP exceptions
         except Exception as e:
-            logger.error(f"Error loading scaler or preprocessing: {e}", exc_info=True)
+            logger.error(f"Error preprocessing features: {e}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Preprocessing failed: {str(e)}"

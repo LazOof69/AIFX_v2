@@ -100,10 +100,14 @@ class ModelVersion:
 
             # Load scaler
             if self.scaler_path and os.path.exists(self.scaler_path):
-                logger.info(f"  Loading scaler from {self.scaler_path}")
-                with open(self.scaler_path, 'rb') as f:
-                    self.scaler = pickle.load(f)
-                logger.info(f"  ✅ Scaler loaded")
+                try:
+                    logger.info(f"  Loading scaler from {self.scaler_path}")
+                    with open(self.scaler_path, 'rb') as f:
+                        self.scaler = pickle.load(f)
+                    logger.info(f"  ✅ Scaler loaded")
+                except Exception as e:
+                    logger.warning(f"  ⚠️ Failed to load scaler: {e}")
+                    logger.warning(f"  Model will work without scaler (features should be pre-normalized)")
 
             # Load features
             if self.features_path and os.path.exists(self.features_path):
