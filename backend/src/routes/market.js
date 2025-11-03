@@ -45,7 +45,7 @@ router.get(
     const { pair } = req.params;
 
     try {
-      const data = await forexService.getRealTimeRate(pair);
+      const data = await forexService.getRealtimePrice(pair);
 
       // Add user-specific information if authenticated
       let userContext = {};

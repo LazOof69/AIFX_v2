@@ -43,7 +43,7 @@ const initializeCache = async () => {
 const getRealtimePrice = async (pair) => {
   try {
     // Check cache first
-    const cacheKey = cache.generateMarketDataKey(pair, 'realtime');
+    const cacheKey = cache.generateForexKey('realtime', pair);
     const cachedData = await cache.get(cacheKey);
 
     if (cachedData) {
@@ -121,7 +121,7 @@ const getHistoricalData = async (pair, timeframe = '1hour', limit = 100) => {
     const normalizedTimeframe = normalizeTimeframe(timeframe);
 
     // Check cache first
-    const cacheKey = cache.generateMarketDataKey(pair, normalizedTimeframe, limit);
+    const cacheKey = cache.generateForexKey('historical', pair, normalizedTimeframe, limit.toString());
     const cachedData = await cache.get(cacheKey);
 
     if (cachedData) {

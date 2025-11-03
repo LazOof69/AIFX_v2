@@ -1,6 +1,7 @@
 """
 YFinance Data Fetcher
 Fetches forex data using yfinance for real-time market data
+Enhanced with rate limit handling and better error recovery
 """
 
 import yfinance as yf
@@ -8,9 +9,13 @@ import pandas as pd
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import logging
+import time
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Note: yfinance 0.2.66+ uses curl_cffi internally for better rate limit handling
+# No custom session needed - let yfinance handle it
 
 
 class YFinanceFetcher:
@@ -98,16 +103,37 @@ class YFinanceFetcher:
 
             logger.info(f"Fetching {pair} ({ticker}) data: timeframe={timeframe}, interval={interval}, days={period_days}")
 
-            # Fetch data
+            # Fetch data with retry logic
             end_date = datetime.now()
             start_date = end_date - timedelta(days=period_days)
 
+            # Let yfinance use its internal curl_cffi session for better rate limit handling
             ticker_obj = yf.Ticker(ticker)
-            df = ticker_obj.history(
-                start=start_date,
-                end=end_date,
-                interval=interval
-            )
+
+            # Try up to 3 times with delays
+            max_retries = 3
+            df = pd.DataFrame()
+
+            for attempt in range(max_retries):
+                try:
+                    df = ticker_obj.history(
+                        start=start_date,
+                        end=end_date,
+                        interval=interval,
+                        raise_errors=True
+                    )
+                    if not df.empty:
+                        logger.info(f"✅ Successfully fetched data on attempt {attempt + 1}")
+                        break
+                    logger.warning(f"Empty data on attempt {attempt + 1}/{max_retries}")
+                    if attempt < max_retries - 1:
+                        time.sleep(2 ** attempt)  # Exponential backoff: 1s, 2s, 4s
+                except Exception as e:
+                    logger.warning(f"Attempt {attempt + 1}/{max_retries} failed: {str(e)}")
+                    if attempt < max_retries - 1:
+                        time.sleep(2 ** attempt)
+                    else:
+                        raise  # Re-raise on last attempt
 
             if df.empty:
                 logger.warning(f"No data returned for {pair}")
@@ -185,17 +211,24 @@ class YFinanceFetcher:
         """Get current price for a currency pair"""
         try:
             ticker = cls.get_ticker(pair)
-            ticker_obj = yf.Ticker(ticker)
+            ticker_obj = yf.Ticker(ticker)  # Let yfinance use curl_cffi internally
 
             # Try to get fast info first
             try:
                 info = ticker_obj.fast_info
                 return float(info.last_price)
             except:
-                # Fallback to history
-                df = ticker_obj.history(period='1d', interval='1m')
-                if not df.empty:
-                    return float(df['Close'].iloc[-1])
+                # Fallback to history with retry
+                for attempt in range(2):
+                    try:
+                        df = ticker_obj.history(period='1d', interval='1m')
+                        if not df.empty:
+                            return float(df['Close'].iloc[-1])
+                    except Exception as e:
+                        if attempt == 0:
+                            time.sleep(1)
+                        else:
+                            logger.error(f"Failed to get price after retries: {e}")
                 return None
 
         except Exception as e:
