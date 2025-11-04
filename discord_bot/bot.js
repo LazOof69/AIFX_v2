@@ -247,6 +247,19 @@ client.on(Events.InteractionCreate, async interaction => {
   }
 
   try {
+    // Defer immediately at bot level to prevent timeout (3 second Discord limit)
+    // Commands that need immediate responses can skip deferring in their execute()
+    if (!interaction.replied && !interaction.deferred) {
+      try {
+        await interaction.deferReply();
+      } catch (deferError) {
+        // If defer fails, log and continue - command will handle it
+        if (deferError.code !== 40060) { // Ignore "already acknowledged" error
+          logger.warn(`Failed to defer interaction: ${deferError.message}`);
+        }
+      }
+    }
+
     await command.execute(interaction);
     logger.info(`Command ${interaction.commandName} executed by ${interaction.user.username}`);
   } catch (error) {
@@ -257,10 +270,14 @@ client.on(Events.InteractionCreate, async interaction => {
       ephemeral: true
     };
 
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp(errorMessage);
-    } else {
-      await interaction.reply(errorMessage);
+    try {
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp(errorMessage);
+      } else {
+        await interaction.reply(errorMessage);
+      }
+    } catch (replyError) {
+      logger.error(`Failed to send error message: ${replyError.message}`);
     }
   }
 });

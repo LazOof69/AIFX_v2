@@ -5,7 +5,7 @@
 
 const express = require('express');
 const tradingSignalService = require('../services/tradingSignalService');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authenticateFlexible } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/errorHandler');
 const Joi = require('joi');
 const logger = require('../utils/logger');
@@ -116,14 +116,74 @@ const validateHistoryQuery = (req, res, next) => {
 };
 
 /**
- * @route   GET /api/v1/trading/signal/:pair
+ * @route   GET /api/v1/trading/signal (query param version)
+ * @desc    Get trading signal for a specific currency pair (Discord bot compatible)
+ * @access  Private
+ * @example GET /api/v1/trading/signal?pair=EUR/USD&timeframe=1h
+ */
+router.get(
+  '/signal',
+  authenticateFlexible,
+  asyncHandler(async (req, res) => {
+    const { pair, timeframe = '1h', riskLevel } = req.query;
+
+    // Validate pair is provided
+    if (!pair) {
+      return res.status(400).json({
+        success: false,
+        data: null,
+        error: 'Currency pair is required (e.g., ?pair=EUR/USD)',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Validate pair format
+    if (!pair.match(/^[A-Z]{3}\/[A-Z]{3}$/)) {
+      return res.status(400).json({
+        success: false,
+        data: null,
+        error: 'Currency pair must be in format XXX/XXX (e.g., EUR/USD)',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    logger.info(`User ${req.user.id} requesting signal for ${pair}`);
+
+    // Get user preferences
+    const userPreferences = req.user.preferences || {};
+    if (riskLevel) {
+      userPreferences.riskLevel = parseInt(riskLevel);
+    }
+
+    // Generate trading signal
+    const signal = await tradingSignalService.generateSignal(pair, {
+      timeframe: timeframe,
+      userPreferences: userPreferences,
+      userId: req.user.id
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        signal: signal,
+        disclaimer: 'This is not financial advice. Trading involves significant risk of loss. Always do your own research and consult with a licensed financial advisor.',
+        riskWarning: signal.riskWarning
+      },
+      error: null,
+      timestamp: new Date().toISOString()
+    });
+  })
+);
+
+/**
+ * @route   GET /api/v1/trading/signal/:pair (path param version - kept for compatibility)
  * @desc    Get trading signal for a specific currency pair
  * @access  Private
- * @example GET /api/v1/trading/signal/EUR/USD?timeframe=1h&riskLevel=5
+ * @example GET /api/v1/trading/signal/EUR%2FUSD?timeframe=1h&riskLevel=5
  */
 router.get(
   '/signal/:pair',
-  authenticate,
+  authenticateFlexible,
   validateSignalParams,
   validateSignalQuery,
   asyncHandler(async (req, res) => {

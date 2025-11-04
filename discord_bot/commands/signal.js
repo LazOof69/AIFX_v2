@@ -33,24 +33,45 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      await interaction.deferReply();
-
       const pair = interaction.options.getString('pair').toUpperCase();
       const timeframe = interaction.options.getString('timeframe') || '1h';
 
       // Validate pair format
       if (!pair.match(/^[A-Z]{3}\/[A-Z]{3}$/)) {
-        return await interaction.editReply({
-          content: '❌ Invalid currency pair format. Please use format: XXX/XXX (e.g., EUR/USD)'
-        });
+        // If already deferred (by bot.js), edit the reply
+        if (interaction.deferred) {
+          return await interaction.editReply({
+            content: '❌ Invalid currency pair format. Please use format: XXX/XXX (e.g., EUR/USD)'
+          });
+        } else {
+          // Otherwise reply directly
+          return await interaction.reply({
+            content: '❌ Invalid currency pair format. Please use format: XXX/XXX (e.g., EUR/USD)',
+            ephemeral: true
+          });
+        }
       }
+
+      // Note: bot.js already deferred the reply, so we don't need to defer again
 
       // Call backend API to get signal
       const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:3000';
+      const apiKey = process.env.BACKEND_API_KEY;
+
+      const headers = {};
+      if (apiKey) {
+        headers['x-api-key'] = apiKey;
+      }
+
+      // Use query parameter version (no URL encoding issues)
       const response = await axios.get(
-        `${backendUrl}/api/v1/trading/signal/${pair}`,
+        `${backendUrl}/api/v1/trading/signal`,
         {
-          params: { timeframe },
+          params: {
+            pair: pair,      // axios handles URL encoding automatically
+            timeframe: timeframe
+          },
+          headers: headers,
           timeout: 30000
         }
       );
@@ -153,6 +174,12 @@ module.exports = {
     } catch (error) {
       logger.error('Signal command error:', error);
 
+      // Check if this is a Discord API error (interaction timeout)
+      if (error.code === 10062 || error.code === 'InteractionNotReplied') {
+        logger.warn('Interaction expired before we could respond');
+        return; // Can't reply to expired interaction
+      }
+
       let errorMessage = '❌ Failed to retrieve trading signal. Please try again later.';
 
       if (error.response?.status === 429) {
@@ -161,13 +188,20 @@ module.exports = {
         errorMessage = '❌ ML model not available. Please contact an administrator.';
       } else if (error.code === 'ECONNREFUSED') {
         errorMessage = '❌ Backend service is unavailable. Please contact an administrator.';
-      } else if (error.message) {
+      } else if (error.message && !error.message.includes('interaction')) {
         errorMessage = `❌ Error: ${error.message}`;
       }
 
-      await interaction.editReply({
-        content: errorMessage
-      });
+      // Try to reply - check if interaction is still valid
+      try {
+        if (interaction.deferred) {
+          await interaction.editReply({ content: errorMessage });
+        } else if (!interaction.replied) {
+          await interaction.reply({ content: errorMessage, ephemeral: true });
+        }
+      } catch (replyError) {
+        logger.error('Failed to send error message:', replyError);
+      }
     }
   }
 };

@@ -26,15 +26,18 @@ class TradingSignalService {
       logger.info(`Generating trading signal for ${pair} on ${timeframe}`);
 
       // Fetch market data
-      const marketData = await forexService.getHistoricalData(
+      const marketDataResponse = await forexService.getHistoricalData(
         pair,
         timeframe, // forexService will handle timeframe mapping internally
         100 // Get ~100 data points
       );
 
-      if (!marketData || !marketData.timeSeries || marketData.timeSeries.length === 0) {
+      if (!marketDataResponse || !marketDataResponse.data || !marketDataResponse.data.timeSeries || marketDataResponse.data.timeSeries.length === 0) {
         throw new Error('Insufficient market data for signal generation');
       }
+
+      // Extract the actual market data from the response
+      const marketData = marketDataResponse.data;
 
       // Get current price
       const currentPrice = parseFloat(marketData.timeSeries[0].close);
@@ -119,7 +122,7 @@ class TradingSignalService {
       // Add risk warning
       signal.riskWarning = 'Trading forex carries significant risk. Never trade with money you cannot afford to lose.';
 
-      logger.info(`Generated ${signal.signal} signal for ${pair} with ${confidence.toFixed(2)} confidence`);
+      logger.info(`Generated ${signal.signal} signal for ${pair} with ${signal.confidence.toFixed(2)} confidence`);
 
       return signal;
     } catch (error) {

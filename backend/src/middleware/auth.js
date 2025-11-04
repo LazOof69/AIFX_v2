@@ -301,7 +301,106 @@ const validateApiKey = (req, res, next) => {
     return next(new AppError('Invalid API key', 401, 'INVALID_API_KEY'));
   }
 
+  // Set a service user context
+  req.user = {
+    id: 'service-discord-bot',
+    username: 'Discord Bot',
+    isService: true
+  };
+  req.userId = 'service-discord-bot';
+
   next();
+};
+
+/**
+ * Flexible authentication middleware that accepts either JWT or API key
+ * Used for endpoints that need to be accessed by both users and internal services
+ *
+ * @param {object} req - Express request object
+ * @param {object} res - Express response object
+ * @param {Function} next - Express next function
+ * @returns {Promise<void>}
+ */
+const authenticateFlexible = async (req, res, next) => {
+  try {
+    // Check for API key first (for internal services like Discord bot)
+    const apiKey = req.headers['x-api-key'];
+
+    if (apiKey) {
+      // Validate API key
+      if (apiKey === process.env.API_KEY) {
+        // Set service user context
+        req.user = {
+          id: 'service-discord-bot',
+          username: 'Discord Bot',
+          isService: true,
+          preferences: {} // Empty preferences for service account
+        };
+        req.userId = 'service-discord-bot';
+        return next();
+      } else {
+        return next(new AppError('Invalid API key', 401, 'INVALID_API_KEY'));
+      }
+    }
+
+    // Otherwise, fall back to JWT authentication
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader) {
+      return next(new AppError('Authorization header or API key required', 401, 'AUTH_REQUIRED'));
+    }
+
+    if (!authHeader.startsWith('Bearer ')) {
+      return next(new AppError('Invalid authorization header format', 401, 'INVALID_AUTH_FORMAT'));
+    }
+
+    const token = authHeader.substring(7);
+
+    if (!token) {
+      return next(new AppError('Access token missing', 401, 'TOKEN_MISSING'));
+    }
+
+    // Verify token
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET, {
+        issuer: 'aifx-v2',
+        audience: 'aifx-v2-users',
+      });
+    } catch (jwtError) {
+      if (jwtError.name === 'TokenExpiredError') {
+        return next(new AppError('Access token expired', 401, 'TOKEN_EXPIRED'));
+      } else if (jwtError.name === 'JsonWebTokenError') {
+        return next(new AppError('Invalid access token', 401, 'INVALID_TOKEN'));
+      } else {
+        return next(new AppError('Token verification failed', 401, 'TOKEN_VERIFICATION_FAILED'));
+      }
+    }
+
+    // Check if user still exists
+    const user = await User.findByPk(decoded.userId);
+    if (!user) {
+      return next(new AppError('User no longer exists', 401, 'USER_NOT_FOUND'));
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      return next(new AppError('User account is deactivated', 401, 'ACCOUNT_DEACTIVATED'));
+    }
+
+    // Check if user is verified
+    if (!user.isVerified) {
+      return next(new AppError('User account is not verified', 401, 'ACCOUNT_NOT_VERIFIED'));
+    }
+
+    // Attach user to request object
+    req.user = user.toSafeObject();
+    req.userId = user.id;
+
+    next();
+  } catch (error) {
+    next(new AppError('Authentication failed', 500, 'AUTH_ERROR'));
+  }
 };
 
 module.exports = {
@@ -315,4 +414,5 @@ module.exports = {
   authRateLimit,
   extractUserIdFromToken,
   validateApiKey,
+  authenticateFlexible,
 };
