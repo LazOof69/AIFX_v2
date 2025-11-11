@@ -33,26 +33,58 @@ module.exports = {
 
   async execute(interaction) {
     try {
+      // ═══════════════════════════════════════════════════════
+      // 🔍 诊断日志 - 检查 interaction 到达时的状态
+      // ═══════════════════════════════════════════════════════
+      logger.info('🔍 INTERACTION 状态诊断:', {
+        id: interaction.id,
+        commandId: interaction.commandId,
+        age: Date.now() - interaction.createdTimestamp,
+        replied: interaction.replied,      // ← 关键！如果是 true = Discord 自动确认了
+        deferred: interaction.deferred,     // ← 关键！如果是 true = Discord 自动确认了
+        isRepliable: interaction.isRepliable(),
+        type: interaction.type
+      });
+
+      // ⚠️ 如果已经被确认，不要尝试 defer
+      if (interaction.replied || interaction.deferred) {
+        logger.error('❌ CRITICAL: Interaction 到达时已经被确认!', {
+          replied: interaction.replied,
+          deferred: interaction.deferred,
+          possibleCauses: [
+            '1. Discord 参数验证失败',
+            '2. Bot 权限不足',
+            '3. Discord 客户端 bug',
+            '4. 隐藏的 bot 实例'
+          ]
+        });
+
+        // 尝试直接 editReply (如果已 defer)
+        if (interaction.deferred) {
+          await interaction.editReply({
+            content: '❌ 诊断模式：Interaction 预先被确认了。请联系管理员。'
+          });
+        }
+        return;
+      }
+
+      logger.info('✅ Interaction 状态正常，开始 defer...');
+
+      // CRITICAL: Defer immediately - backend API takes ~1 second
+      // Must acknowledge within 3 seconds or Discord times out
+      await interaction.deferReply();
+
       const pair = interaction.options.getString('pair').toUpperCase();
       const timeframe = interaction.options.getString('timeframe') || '1h';
 
       // Validate pair format
       if (!pair.match(/^[A-Z]{3}\/[A-Z]{3}$/)) {
-        // If already deferred (by bot.js), edit the reply
-        if (interaction.deferred) {
-          return await interaction.editReply({
-            content: '❌ Invalid currency pair format. Please use format: XXX/XXX (e.g., EUR/USD)'
-          });
-        } else {
-          // Otherwise reply directly
-          return await interaction.reply({
-            content: '❌ Invalid currency pair format. Please use format: XXX/XXX (e.g., EUR/USD)',
-            ephemeral: true
-          });
-        }
+        return await interaction.editReply({
+          content: '❌ Invalid currency pair format. Please use format: XXX/XXX (e.g., EUR/USD)'
+        });
       }
 
-      // Note: bot.js already deferred the reply, so we don't need to defer again
+      // Note: bot.js already acknowledged the interaction (either deferred or replied)
 
       // Call backend API to get signal
       const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:3000';
@@ -165,6 +197,7 @@ module.exports = {
           }
         }
 
+        // Always use editReply since we deferred at the start
         await interaction.editReply({ embeds: [embed] });
 
         logger.info(`Signal requested by ${interaction.user.username} for ${pair} (${timeframe})`);
@@ -192,13 +225,9 @@ module.exports = {
         errorMessage = `❌ Error: ${error.message}`;
       }
 
-      // Try to reply - check if interaction is still valid
+      // Try to edit the deferred reply with error message
       try {
-        if (interaction.deferred) {
-          await interaction.editReply({ content: errorMessage });
-        } else if (!interaction.replied) {
-          await interaction.reply({ content: errorMessage, ephemeral: true });
-        }
+        await interaction.editReply({ content: errorMessage });
       } catch (replyError) {
         logger.error('Failed to send error message:', replyError);
       }

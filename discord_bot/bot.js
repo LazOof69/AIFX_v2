@@ -11,6 +11,95 @@ const axios = require('axios');
 const redis = require('redis');
 const logger = require('./utils/logger');
 
+/**
+ * Sleep utility for retry logic
+ */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Defer interaction with retry logic to handle Discord Gateway-to-REST-API sync delays
+ *
+ * Discord's distributed architecture can cause race conditions where:
+ * - Gateway creates interaction and sends to bot via WebSocket
+ * - Bot tries to defer via REST API
+ * - REST API doesn't know about interaction yet (eventual consistency)
+ * - Result: "Unknown interaction" error (10062)
+ *
+ * Solution: Retry with exponential backoff to wait for Discord's internal sync
+ *
+ * @param {Interaction} interaction - Discord interaction
+ * @param {number} maxRetries - Maximum retry attempts (default: 3)
+ * @returns {Promise<{success: boolean, method: string}>} - Defer result
+ */
+async function deferWithRetry(interaction, maxRetries = 3) {
+  const interactionAge = Date.now() - interaction.createdTimestamp;
+
+  logger.info(`🚀 Attempting to defer ${interaction.commandName} (age: ${interactionAge}ms)`);
+
+  // Strategy 1: Try defer with retry logic
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      // Add small delay before first attempt to let Discord sync (50ms buffer)
+      if (attempt === 1) {
+        await sleep(50);
+      }
+
+      await interaction.deferReply();
+      logger.info(`✅ Successfully deferred ${interaction.commandName} on attempt ${attempt}/${maxRetries} (total age: ${Date.now() - interaction.createdTimestamp}ms)`);
+      return { success: true, method: 'defer' };
+    } catch (error) {
+      const currentAge = Date.now() - interaction.createdTimestamp;
+
+      logger.warn(`⚠️ Defer attempt ${attempt}/${maxRetries} failed: ${error.message}`, {
+        code: error.code,
+        age: currentAge,
+        command: interaction.commandName
+      });
+
+      // Error 10062: Unknown interaction - Discord API doesn't know about it yet
+      if (error.code === 10062 && attempt < maxRetries) {
+        // Exponential backoff: 50ms, 100ms, 150ms
+        const delay = attempt * 50;
+        logger.info(`⏳ Retrying defer in ${delay}ms (Gateway-to-REST sync delay suspected)...`);
+        await sleep(delay);
+        continue; // Try again
+      }
+
+      // Error 40060: Already acknowledged - someone else handled it
+      if (error.code === 40060) {
+        logger.warn('⚠️ Interaction already acknowledged - another process handled it');
+        return { success: false, method: 'defer', error: 'already_acknowledged' };
+      }
+
+      // If max retries exceeded with 10062, try immediate reply fallback
+      if (error.code === 10062 && attempt === maxRetries) {
+        logger.warn(`⚠️ Defer failed after ${maxRetries} attempts, trying immediate reply fallback...`);
+        break; // Exit loop to try immediate reply
+      }
+
+      // Other errors - don't retry
+      logger.error(`❌ Defer failed with unrecoverable error: ${error.message} (code: ${error.code})`);
+      return { success: false, method: 'defer', error: error.code };
+    }
+  }
+
+  // Strategy 2: Fallback to immediate reply (doesn't require REST API lookup)
+  try {
+    logger.info(`🔄 Attempting immediate reply fallback for ${interaction.commandName}...`);
+    await interaction.reply({
+      content: '⏳ Processing your request...',
+      ephemeral: false
+    });
+    logger.info(`✅ Successfully used immediate reply fallback for ${interaction.commandName}`);
+    return { success: true, method: 'immediate_reply' };
+  } catch (replyError) {
+    logger.error(`❌ Immediate reply fallback failed: ${replyError.message} (code: ${replyError.code})`);
+    return { success: false, method: 'immediate_reply', error: replyError.code };
+  }
+}
+
 // Create Discord client
 const client = new Client({
   intents: [
@@ -247,23 +336,32 @@ client.on(Events.InteractionCreate, async interaction => {
   }
 
   try {
-    // Defer immediately at bot level to prevent timeout (3 second Discord limit)
-    // Commands that need immediate responses can skip deferring in their execute()
-    if (!interaction.replied && !interaction.deferred) {
-      try {
-        await interaction.deferReply();
-      } catch (deferError) {
-        // If defer fails, log and continue - command will handle it
-        if (deferError.code !== 40060) { // Ignore "already acknowledged" error
-          logger.warn(`Failed to defer interaction: ${deferError.message}`);
-        }
-      }
+    // Check interaction age - Discord interactions expire after 3 seconds
+    const interactionAge = Date.now() - interaction.createdTimestamp;
+
+    logger.info(`⏱️ Interaction received for ${interaction.commandName}, age: ${interactionAge}ms`);
+    logger.info(`🔑 Interaction details:`, {
+      interactionId: interaction.id,
+      commandId: interaction.commandId,
+      commandName: interaction.commandName,
+      guildId: interaction.guildId,
+      channelId: interaction.channelId,
+      createdTimestamp: interaction.createdTimestamp,
+      currentTime: Date.now(),
+      age: interactionAge
+    });
+
+    if (interactionAge > 2500) {
+      logger.warn(`Interaction too old (${interactionAge}ms), skipping command ${interaction.commandName}`);
+      return;
     }
 
+    // Simply execute the command - let it handle its own reply/defer logic
+    logger.info(`📝 Executing ${interaction.commandName} command...`);
     await command.execute(interaction);
-    logger.info(`Command ${interaction.commandName} executed by ${interaction.user.username}`);
+    logger.info(`✅ Command ${interaction.commandName} executed successfully by ${interaction.user.username}`);
   } catch (error) {
-    logger.error(`Error executing command ${interaction.commandName}:`, error);
+    logger.error(`❌ Error executing command ${interaction.commandName}:`, error);
 
     const errorMessage = {
       content: '❌ There was an error executing this command!',
