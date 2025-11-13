@@ -233,17 +233,53 @@ const getCacheTTL = (timeframe) => {
 };
 
 /**
- * Get supported currency pairs
+ * Get supported currency pairs with detailed information
+ * Returns structured data compatible with market routes
  */
 const getSupportedPairs = () => {
+  // Major currency pairs (most liquid, involve USD)
+  const majorPairs = [
+    'EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF',
+    'AUD/USD', 'USD/CAD', 'NZD/USD'
+  ];
+
+  // Minor currency pairs (cross pairs, no USD)
+  const minorPairs = [
+    'EUR/GBP', 'EUR/AUD', 'EUR/JPY', 'GBP/JPY',
+    'CHF/JPY', 'AUD/JPY', 'AUD/NZD'
+  ];
+
+  /**
+   * Create detailed pair information
+   * @param {string} pair - Currency pair (e.g., 'EUR/USD')
+   * @param {string} category - Category (major, minor)
+   * @returns {object} Pair information object
+   */
+  const createPairInfo = (pair, category) => {
+    const [base, quote] = pair.split('/');
+    return {
+      pair,
+      base,
+      quote,
+      category,
+      description: `${base} to ${quote}`,
+      available: true
+    };
+  };
+
+  // Generate detailed info for each pair
+  const majorPairInfos = majorPairs.map(p => createPairInfo(p, 'major'));
+  const minorPairInfos = minorPairs.map(p => createPairInfo(p, 'minor'));
+  const allPairs = [...majorPairInfos, ...minorPairInfos];
+
   return {
-    success: true,
-    data: {
-      pairs: SUPPORTED_PAIRS,
-      total: SUPPORTED_PAIRS.length,
-      source: 'yfinance',
+    pairs: allPairs,
+    categories: {
+      major: majorPairInfos,
+      minor: minorPairInfos
     },
-    timestamp: new Date().toISOString(),
+    total: allPairs.length,
+    timestamp: new Date().toISOString()
   };
 };
 
@@ -271,10 +307,94 @@ const saveMarketData = async (pair, data) => {
   }
 };
 
+/**
+ * Get API usage statistics
+ * Returns information about the data sources being used
+ *
+ * @returns {Promise<object>} API usage statistics
+ */
+const getApiUsageStats = async () => {
+  try {
+    // Check ML Engine health
+    let mlEngineStatus = 'unknown';
+    let mlEngineHealthy = false;
+
+    try {
+      const healthCheck = await axios.get(`${ML_API_URL}/health`, { timeout: 5000 });
+      mlEngineStatus = healthCheck.data.status || 'unknown';
+      mlEngineHealthy = mlEngineStatus === 'healthy';
+    } catch (error) {
+      mlEngineStatus = 'offline';
+      console.warn('⚠️ ML Engine health check failed:', error.message);
+    }
+
+    return {
+      yfinance: {
+        name: 'YFinance via ML Engine',
+        status: mlEngineHealthy ? 'active' : 'degraded',
+        endpoint: ML_API_URL,
+        dailyLimit: 'Unlimited',
+        rateLimitPerMinute: 'No strict limit',
+        requestsToday: 'N/A',
+        lastChecked: new Date().toISOString(),
+        healthy: mlEngineHealthy,
+        features: [
+          'Real-time forex data',
+          'Historical data',
+          'Intraday data',
+          'Multiple timeframes'
+        ]
+      },
+      mlEngine: {
+        status: mlEngineStatus,
+        endpoint: ML_API_URL,
+        healthy: mlEngineHealthy,
+        lastChecked: new Date().toISOString()
+      }
+    };
+  } catch (error) {
+    console.error('❌ Error getting API usage stats:', error.message);
+    throw new AppError(
+      `Failed to get API usage stats: ${error.message}`,
+      503,
+      'STATS_ERROR'
+    );
+  }
+};
+
+/**
+ * Clear cache by pattern
+ * Allows clearing specific cache keys or all forex cache
+ *
+ * @param {string} pattern - Redis key pattern (default: 'forex:*')
+ * @returns {Promise<number>} Number of keys cleared
+ */
+const clearCache = async (pattern = 'forex:*') => {
+  try {
+    console.log(`🗑️ Clearing cache with pattern: ${pattern}`);
+
+    const clearedCount = await cache.clearPattern(pattern);
+
+    console.log(`✅ Cleared ${clearedCount} cache keys matching pattern: ${pattern}`);
+
+    return clearedCount;
+  } catch (error) {
+    console.error(`❌ Error clearing cache: ${error.message}`);
+    throw new AppError(
+      `Failed to clear cache: ${error.message}`,
+      500,
+      'CACHE_CLEAR_ERROR'
+    );
+  }
+};
+
 module.exports = {
   initializeCache,
   getRealtimePrice,
   getHistoricalData,
   getSupportedPairs,
   saveMarketData,
+  getApiUsageStats,
+  clearCache,
+  SUPPORTED_PAIRS,
 };
