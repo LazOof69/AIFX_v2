@@ -5,6 +5,7 @@
 
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const { Op } = require('sequelize');
 const User = require('../models/User');
 const AppError = require('../utils/AppError');
 const {
@@ -25,7 +26,7 @@ const registerUser = async (userData) => {
   // Check if user already exists
   const existingUser = await User.findOne({
     where: {
-      [User.sequelize.Op.or]: [
+      [Op.or]: [
         { email: email.toLowerCase() },
         { username: username.toLowerCase() },
       ],

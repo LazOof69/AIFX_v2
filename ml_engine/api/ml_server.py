@@ -13,6 +13,7 @@ except Exception as e:
 
 from fastapi import FastAPI, HTTPException, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Optional, Any
 import yaml
@@ -398,15 +399,17 @@ async def get_market_data(
                 detail=result.get('error', 'Failed to fetch market data')
             )
 
-        return {
-            "success": True,
-            "data": {
-                "timeSeries": result['timeSeries'],
-                "metadata": result['metadata']
-            },
-            "error": None,
-            "timestamp": get_current_timestamp()
-        }
+        return JSONResponse(
+            content={
+                "success": True,
+                "data": {
+                    "timeSeries": result['timeSeries'],
+                    "metadata": result['metadata']
+                },
+                "error": None,
+                "timestamp": get_current_timestamp()
+            }
+        )
 
     except HTTPException:
         raise
