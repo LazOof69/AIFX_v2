@@ -60,7 +60,7 @@ class MarketDataCollector {
             low: parseFloat(candle.low),
             close: parseFloat(candle.close),
             volume: parseFloat(candle.volume) || 0.0,
-            source: 'alpha_vantage',
+            source: 'yfinance',
             isRealTime: false
           });
           storedCount++;
@@ -96,11 +96,11 @@ class MarketDataCollector {
       // Fetch historical data from forex service
       const result = await forexService.getHistoricalData(pair, timeframe, limit);
 
-      if (!result || !result.data || !Array.isArray(result.data)) {
+      if (!result || !result.data || !result.data.timeSeries || !Array.isArray(result.data.timeSeries)) {
         throw new Error(`Invalid data format received from forex service`);
       }
 
-      const candles = result.data;
+      const candles = result.data.timeSeries;
 
       if (candles.length === 0) {
         logger.warn(`No data received for ${pair} ${timeframe}`);
