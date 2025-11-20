@@ -66,7 +66,7 @@ const corsOptions = {
   credentials: true,
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Service-Name'],
 };
 
 app.use(cors(corsOptions));
@@ -126,9 +126,14 @@ app.use('/api/v1/market', require('./routes/market'));
 app.use('/api/v1/trading', require('./routes/trading'));
 app.use('/api/v1/notifications', require('./routes/notifications'));
 app.use('/api/v1/positions', require('./routes/positions')); // Phase 3: Position management
+
+// Microservices API routes (Phase 2: Backend APIs for services)
+app.use('/api/v1/discord', require('./routes/api/v1/discord')); // Discord Bot APIs
+
 // TODO: Add additional route files when created
 // app.use('/api/v1/preferences', require('./routes/preferences'));
 // app.use('/api/v1/analytics', require('./routes/analytics'));
+// app.use('/api/v1/ml', require('./routes/api/v1/ml')); // ML Engine APIs (Phase 3)
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {

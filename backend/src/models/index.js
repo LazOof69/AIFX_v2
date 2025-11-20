@@ -10,19 +10,12 @@ const TradingSignal = require('./TradingSignal');
 const UserPreferences = require('./UserPreferences');
 const UserTradingHistory = require('./UserTradingHistory');
 const PositionMonitoring = require('./PositionMonitoring');
+const UserDiscordSettings = require('./UserDiscordSettings');
 
 // ML Continuous Learning models
 const ModelTrainingLog = require('./ModelTrainingLog');
 const ModelVersion = require('./ModelVersion');
 const ModelABTest = require('./ModelABTest');
-
-// Discord automation models (imported from discord_bot folder)
-// TODO: These models are not currently used by the backend services
-// Uncomment when Discord-based position tracking is implemented
-// const UserDiscordSettings = require('../../../discord_bot/models/UserDiscordSettings')(sequelize);
-// const SignalNotification = require('../../../discord_bot/models/SignalNotification')(sequelize);
-// const UserTrade = require('../../../discord_bot/models/UserTrade')(sequelize);
-// const TradeUpdate = require('../../../discord_bot/models/TradeUpdate')(sequelize);
 
 // Establish model relationships
 
@@ -129,20 +122,27 @@ ModelABTest.hasMany(TradingSignal, {
 
 /**
  * Discord Automation Relationships
- * TODO: Uncomment when Discord models are enabled
+ * Phase 2: Backend APIs for Discord Bot
  */
 
 // User -> UserDiscordSettings (One-to-One)
-// User.hasOne(UserDiscordSettings, {
-//   foreignKey: 'userId',
-//   as: 'discordSettings',
-//   onDelete: 'CASCADE',
-// });
+User.hasOne(UserDiscordSettings, {
+  foreignKey: 'userId',
+  as: 'discordSettings',
+  onDelete: 'CASCADE',
+});
 
-// UserDiscordSettings.belongsTo(User, {
-//   foreignKey: 'userId',
-//   as: 'user',
-// });
+UserDiscordSettings.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user',
+});
+
+// UserDiscordSettings -> UserPreferences (One-to-One, through User)
+UserDiscordSettings.belongsTo(UserPreferences, {
+  foreignKey: 'userId',
+  targetKey: 'userId',
+  as: 'preferences',
+});
 
 // User -> SignalNotification (One-to-Many)
 // User.hasMany(SignalNotification, {
@@ -201,13 +201,9 @@ module.exports = {
   UserPreferences,
   UserTradingHistory,
   PositionMonitoring,
+  UserDiscordSettings,
   // ML Continuous Learning models
   ModelTrainingLog,
   ModelVersion,
   ModelABTest,
-  // Discord automation models (commented out - not currently used)
-  // UserDiscordSettings,
-  // SignalNotification,
-  // UserTrade,
-  // TradeUpdate,
 };
