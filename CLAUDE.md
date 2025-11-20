@@ -12,6 +12,290 @@ AIFX_v2 is an AI-powered forex trading advisory system that provides trading sig
 - Notifications: Discord.js
 - Real-time: Socket.io
 
+## 🏗️ Microservices Architecture Principles
+
+**CRITICAL**: This system is being refactored to follow microservices architecture. These principles are MANDATORY for all future development.
+
+### Architecture Decision Record (2025-11-20)
+
+The system has identified **systemic architectural flaws** requiring a fundamental restructure to microservices:
+
+#### 1️⃣ Service Independence (服務獨立性)
+**Principle**: Each service MUST be able to operate independently
+- ✅ Each service can start/stop without affecting others
+- ✅ Service failure should NOT cascade to other services
+- ✅ Each service has its own health check endpoint
+- ❌ NO shared database models between services
+- ❌ NO direct database access (except Backend)
+
+**Implementation**:
+```javascript
+// ✅ CORRECT: Service can run independently
+// Discord Bot doesn't need database connection to start
+const bot = new DiscordBot({
+  backendApiUrl: process.env.BACKEND_API_URL
+});
+
+// ❌ WRONG: Service depends on database
+const db = require('../models'); // DON'T DO THIS in Discord Bot
+```
+
+#### 2️⃣ Simplified Process (簡化流程)
+**Principle**: Clear service boundaries and responsibilities
+- ✅ Backend: Data access layer, business logic, user auth
+- ✅ ML Engine: Model training, predictions, ML-specific logic
+- ✅ Discord Bot: Discord interactions, notification delivery
+- ✅ Frontend: User interface, visualization
+- ❌ NO mixing of responsibilities across services
+
+**Service Responsibility Matrix**:
+| Responsibility | Backend | ML Engine | Discord Bot | Frontend |
+|---------------|---------|-----------|-------------|----------|
+| Database Access | ✅ ONLY | ❌ API | ❌ API | ❌ API |
+| User Auth | ✅ | ❌ | ❌ | ✅ Client |
+| ML Training | ❌ | ✅ ONLY | ❌ | ❌ |
+| Discord Messages | ❌ | ❌ | ✅ ONLY | ❌ |
+| WebSocket | ✅ Server | ❌ | ❌ | ✅ Client |
+
+#### 3️⃣ API-Only Communication (純 API 通信)
+**Principle**: Services communicate EXCLUSIVELY through REST APIs
+- ✅ Backend exposes APIs for other services
+- ✅ All inter-service communication is HTTP REST
+- ✅ API contracts are versioned and documented
+- ❌ NO direct function calls between services
+- ❌ NO shared modules or libraries (except types)
+- ❌ NO direct database access from Discord Bot or ML Engine
+
+**Communication Rules**:
+```
+Frontend ──REST/WS──► Backend ──REST──► ML Engine
+                        ▲
+                        │
+                      REST
+                        │
+                   Discord Bot
+```
+
+**Example**:
+```javascript
+// ✅ CORRECT: Discord Bot calls Backend API
+const response = await axios.get(
+  `${BACKEND_API_URL}/api/v1/discord/users/${discordId}`,
+  { headers: { 'Authorization': `Bearer ${API_KEY}` } }
+);
+
+// ❌ WRONG: Discord Bot directly accesses database
+const user = await User.findOne({ where: { discordId } }); // DON'T DO THIS
+```
+
+#### 4️⃣ Context Management (上下文管理)
+**Principle**: This file (CLAUDE.md) is the source of truth
+- ✅ All architectural decisions are documented here
+- ✅ Claude Code MUST reference this file for architecture questions
+- ✅ Any deviation from these principles requires updating this file
+- ❌ NO architectural decisions without documenting
+
+### Service Communication Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│              Service Communication Rules                 │
+├─────────────────────────────────────────────────────────┤
+│                                                           │
+│  Frontend  ─────REST/WS────►  Backend (Port 3000)       │
+│                                   │                      │
+│                                   │ PostgreSQL           │
+│                                   │ (ONLY Backend        │
+│                                   │  can access)         │
+│                                   │                      │
+│                                   ├──REST──► ML Engine   │
+│                                   │         (Port 8000)  │
+│                                   │                      │
+│                                   └──REST──► Discord Bot │
+│  (Discord Bot calls Backend API)                        │
+│                                                           │
+│  KEY RULES:                                              │
+│  • Only Backend accesses PostgreSQL directly            │
+│  • Discord Bot: NO database, uses Backend API           │
+│  • ML Engine: NO database, uses Backend API             │
+│  • All communication through REST APIs                  │
+│                                                           │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Database Access Strategy
+
+**CRITICAL RULE**: Shared Database + API Layer
+
+```
+Services:           Database Access:
+
+Frontend            ──┐
+                      │
+ML Engine           ──┤──── REST API ────► Backend ──► PostgreSQL
+                      │                      (ONLY)
+Discord Bot         ──┘
+```
+
+**Rules**:
+1. ✅ **Backend ONLY** has direct PostgreSQL access
+2. ✅ Backend uses Sequelize ORM
+3. ✅ Other services MUST use Backend REST APIs
+4. ❌ **NEVER** create database connections in Discord Bot
+5. ❌ **NEVER** create database connections in ML Engine
+6. ❌ **NEVER** share Sequelize models between services
+
+**File Structure**:
+```
+✅ ALLOWED:
+backend/src/models/          # Only Backend has models
+backend/src/config/database.js
+
+❌ FORBIDDEN:
+discord_bot/models/          # DELETE THIS
+discord_bot/config/database.js  # DELETE THIS
+ml_engine/models/            # No database models here
+```
+
+### API Design Standards
+
+All APIs must follow these standards:
+
+#### Versioning
+```
+/api/v1/discord/users       ✅ Correct
+/discord/users              ❌ Wrong (no version)
+```
+
+#### Authentication
+```javascript
+// Backend API for Discord Bot
+headers: {
+  'Authorization': 'Bearer <API_KEY>',
+  'X-Service-Name': 'discord-bot'
+}
+
+// Backend API for Frontend
+headers: {
+  'Authorization': 'Bearer <JWT_TOKEN>'
+}
+```
+
+#### Response Format
+```javascript
+// Success response (ALWAYS use this format)
+{
+  "success": true,
+  "data": { /* actual data */ },
+  "error": null,
+  "metadata": {
+    "timestamp": "2025-11-20T10:30:00Z",
+    "version": "v1",
+    "requestId": "uuid-here"
+  }
+}
+
+// Error response
+{
+  "success": false,
+  "data": null,
+  "error": {
+    "code": "INVALID_PAIR",
+    "message": "Invalid currency pair format"
+  },
+  "metadata": { /* ... */ }
+}
+```
+
+### Migration Strategy
+
+**Approach**: Incremental Migration (漸進式遷移)
+
+**Phases**:
+1. **Phase 1**: Define service boundaries (Week 1-2)
+2. **Phase 2**: Build Backend APIs for Discord Bot (Week 3-4)
+3. **Phase 3**: Build Backend APIs for ML Engine (Week 5-6)
+4. **Phase 4**: Refactor Discord Bot (Week 7-8)
+5. **Phase 5**: Testing & Validation (Week 9-10)
+
+**Current Phase**: Planning Complete ✅
+
+**Reference**: See `MICROSERVICES_REFACTOR_PLAN.md` for detailed implementation plan
+
+### Refactoring Checklist
+
+Before making ANY changes to the codebase, verify:
+
+- [ ] Does this change follow service independence principle?
+- [ ] Am I using API calls instead of direct database access?
+- [ ] Is the API contract documented?
+- [ ] Does this maintain service isolation?
+- [ ] Have I updated CLAUDE.md if architecture changed?
+
+### Common Anti-Patterns to Avoid
+
+❌ **NEVER DO THIS**:
+```javascript
+// Discord Bot accessing database directly
+const { User } = require('../models');
+const user = await User.findOne({ where: { discordId } });
+
+// Services sharing models
+const UserModel = require('../../backend/src/models/User'); // WRONG
+
+// Circular dependencies
+Backend ──calls──► ML Engine ──calls──► Backend  // WRONG
+```
+
+✅ **ALWAYS DO THIS**:
+```javascript
+// Discord Bot using Backend API
+const backendClient = new BackendApiClient();
+const user = await backendClient.getUser(discordId);
+
+// Clear dependency direction
+Frontend ──► Backend ──► ML Engine  // CORRECT
+Discord Bot ──► Backend              // CORRECT
+```
+
+### Performance Considerations
+
+While microservices add network latency, we mitigate with:
+
+1. **Caching**: Aggressive caching at each service level
+2. **Batching**: Batch API calls where possible
+3. **Async**: Use async processing for non-critical paths
+4. **Monitoring**: Track API response times (target: p95 < 200ms)
+
+### Service Health Checks
+
+Each service MUST implement:
+```javascript
+GET /health
+Response:
+{
+  "status": "healthy",
+  "service": "backend",
+  "version": "1.0.0",
+  "uptime": 3600,
+  "dependencies": {
+    "postgres": "connected",
+    "redis": "connected"
+  }
+}
+```
+
+### Documentation Requirements
+
+For any new API endpoint, document:
+- OpenAPI/Swagger specification
+- Request/response examples
+- Error codes and meanings
+- Rate limits
+- Authentication requirements
+
+**Reference**: See `docs/api/` directory
+
 ## Development Principles
 
 ### 1. Code Style

@@ -1,0 +1,705 @@
+openapi: 3.0.3
+info:
+  title: AIFX v2 Backend API
+  description: |
+    Backend API for AIFX v2 microservices architecture.
+
+    **Microservices Architecture**:
+    - This API serves as the data access layer for all services
+    - Only the Backend service has direct database access
+    - Discord Bot and ML Engine MUST use these APIs
+
+    **Authentication**:
+    - Discord Bot: API Key (`Authorization: Bearer <API_KEY>`)
+    - ML Engine: API Key (`Authorization: Bearer <API_KEY>`)
+    - Frontend: JWT Token (`Authorization: Bearer <JWT_TOKEN>`)
+
+  version: 1.0.0
+  contact:
+    name: AIFX v2 Development Team
+    email: dev@aifx.example.com
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Development server
+  - url: https://api.aifx.example.com/api/v1
+    description: Production server
+
+tags:
+  - name: Discord Bot APIs
+    description: APIs for Discord Bot service to access data
+  - name: ML Engine APIs
+    description: APIs for ML Engine service to access training data
+  - name: Health
+    description: Service health check endpoints
+
+paths:
+  # ==================== Health Check ====================
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check endpoint
+      description: Returns service health status and dependencies
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy, degraded, unhealthy]
+                  service:
+                    type: string
+                    example: backend
+                  version:
+                    type: string
+                    example: 1.0.0
+                  uptime:
+                    type: number
+                    description: Uptime in seconds
+                  dependencies:
+                    type: object
+                    properties:
+                      postgres:
+                        type: string
+                        enum: [connected, disconnected]
+                      redis:
+                        type: string
+                        enum: [connected, disconnected]
+
+  # ==================== Discord Bot APIs ====================
+  /discord/users/{discordId}:
+    get:
+      tags:
+        - Discord Bot APIs
+      summary: Get user by Discord ID
+      description: Retrieves user information and settings by Discord ID
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: discordId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Discord user ID
+          example: "123456789012345678"
+      responses:
+        '200':
+          description: User found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                success: true
+                data:
+                  id: 1
+                  username: "trader123"
+                  email: "trader@example.com"
+                  discordId: "123456789012345678"
+                  discordSettings:
+                    notificationsEnabled: true
+                    signalTypes: ["buy", "sell"]
+                    riskLevel: 5
+                  preferences:
+                    tradingFrequency: "daytrading"
+                    preferredPairs: ["EURUSD", "GBPUSD"]
+                error: null
+                metadata:
+                  timestamp: "2025-11-20T10:30:00Z"
+                  version: "v1"
+                  requestId: "req-123"
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                success: false
+                data: null
+                error:
+                  code: "USER_NOT_FOUND"
+                  message: "User with Discord ID 123456789012345678 not found"
+                metadata:
+                  timestamp: "2025-11-20T10:30:00Z"
+                  version: "v1"
+                  requestId: "req-124"
+
+  /discord/users:
+    post:
+      tags:
+        - Discord Bot APIs
+      summary: Create or update user
+      description: Creates a new user or updates existing user by Discord ID
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - discordId
+                - username
+              properties:
+                discordId:
+                  type: string
+                  example: "123456789012345678"
+                username:
+                  type: string
+                  example: "trader123"
+                email:
+                  type: string
+                  format: email
+                  example: "trader@example.com"
+      responses:
+        '200':
+          description: User created or updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /discord/users/{discordId}/settings:
+    put:
+      tags:
+        - Discord Bot APIs
+      summary: Update Discord settings
+      description: Updates Discord notification settings for a user
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: discordId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "123456789012345678"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notificationsEnabled:
+                  type: boolean
+                signalTypes:
+                  type: array
+                  items:
+                    type: string
+                    enum: [buy, sell, hold]
+                riskLevel:
+                  type: integer
+                  minimum: 1
+                  maximum: 10
+      responses:
+        '200':
+          description: Settings updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /discord/signals:
+    get:
+      tags:
+        - Discord Bot APIs
+      summary: Get pending trading signals
+      description: Retrieves trading signals that need to be sent to Discord users
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, delivered]
+            default: pending
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+      responses:
+        '200':
+          description: List of signals
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                success: true
+                data:
+                  signals:
+                    - id: 1
+                      pair: "EURUSD"
+                      signal: "buy"
+                      confidence: 0.85
+                      entryPrice: 1.1234
+                      stopLoss: 1.1200
+                      takeProfit: 1.1300
+                      createdAt: "2025-11-20T10:00:00Z"
+                      users:
+                        - userId: 1
+                          discordId: "123456789012345678"
+                          notified: false
+                  pagination:
+                    total: 5
+                    limit: 50
+                    offset: 0
+                error: null
+                metadata:
+                  timestamp: "2025-11-20T10:30:00Z"
+                  version: "v1"
+
+  /discord/signals/{signalId}/delivered:
+    post:
+      tags:
+        - Discord Bot APIs
+      summary: Mark signal as delivered
+      description: Marks a trading signal as delivered to specific user
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: signalId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userId
+                - discordId
+              properties:
+                userId:
+                  type: integer
+                discordId:
+                  type: string
+                deliveredAt:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: Signal marked as delivered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /discord/trades:
+    get:
+      tags:
+        - Discord Bot APIs
+      summary: Get user trading history
+      description: Retrieves trading history for a specific user
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: User trades
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+    post:
+      tags:
+        - Discord Bot APIs
+      summary: Record a trade
+      description: Records a user trade action from Discord
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userId
+                - pair
+                - action
+                - amount
+              properties:
+                userId:
+                  type: integer
+                pair:
+                  type: string
+                  example: "EURUSD"
+                action:
+                  type: string
+                  enum: [buy, sell]
+                amount:
+                  type: number
+                  example: 1000
+                entryPrice:
+                  type: number
+                  example: 1.1234
+      responses:
+        '201':
+          description: Trade recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  # ==================== ML Engine APIs ====================
+  /ml/training-data/market/{pair}:
+    get:
+      tags:
+        - ML Engine APIs
+      summary: Get market data for training
+      description: Retrieves historical market data for ML model training
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: pair
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "EURUSD"
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+          example: "2024-01-01"
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+          example: "2024-12-31"
+        - name: interval
+          in: query
+          schema:
+            type: string
+            enum: [1min, 5min, 15min, 1h, 1d]
+            default: 1h
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 1000
+            maximum: 10000
+      responses:
+        '200':
+          description: Market data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                success: true
+                data:
+                  pair: "EURUSD"
+                  interval: "1h"
+                  data:
+                    - timestamp: "2024-01-01T00:00:00Z"
+                      open: 1.1234
+                      high: 1.1250
+                      low: 1.1220
+                      close: 1.1240
+                      volume: 1000000
+                    - timestamp: "2024-01-01T01:00:00Z"
+                      open: 1.1240
+                      high: 1.1260
+                      low: 1.1235
+                      close: 1.1255
+                      volume: 950000
+                  count: 2
+                error: null
+                metadata:
+                  timestamp: "2025-11-20T10:30:00Z"
+                  version: "v1"
+
+  /ml/training-data/signals:
+    get:
+      tags:
+        - ML Engine APIs
+      summary: Get historical trading signals
+      description: Retrieves historical signals with actual outcomes for model training
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 1000
+      responses:
+        '200':
+          description: Historical signals
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /ml/training-data/economic-events:
+    get:
+      tags:
+        - ML Engine APIs
+      summary: Get economic calendar events
+      description: Retrieves economic events for fundamental analysis training
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Economic events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /ml/models/version:
+    post:
+      tags:
+        - ML Engine APIs
+      summary: Register new model version
+      description: Registers a new ML model version with metadata
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - modelName
+                - version
+                - metrics
+              properties:
+                modelName:
+                  type: string
+                  example: "lstm_reversal_predictor"
+                version:
+                  type: string
+                  example: "1.2.0"
+                metrics:
+                  type: object
+                  properties:
+                    accuracy:
+                      type: number
+                    precision:
+                      type: number
+                    recall:
+                      type: number
+                    f1Score:
+                      type: number
+                filePath:
+                  type: string
+                  example: "/models/lstm_reversal_v1.2.0.h5"
+      responses:
+        '201':
+          description: Model version registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /ml/predictions:
+    post:
+      tags:
+        - ML Engine APIs
+      summary: Record prediction result
+      description: Records ML prediction for accuracy tracking
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pair
+                - prediction
+                - confidence
+              properties:
+                pair:
+                  type: string
+                  example: "EURUSD"
+                prediction:
+                  type: string
+                  enum: [buy, sell, hold]
+                confidence:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                factors:
+                  type: object
+                  properties:
+                    technical:
+                      type: number
+                    sentiment:
+                      type: number
+                    pattern:
+                      type: number
+      responses:
+        '201':
+          description: Prediction recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API_KEY
+      description: |
+        API Key authentication for service-to-service communication.
+
+        Discord Bot and ML Engine use this for authentication.
+
+        Example: `Authorization: Bearer your_api_key_here`
+
+    JwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT authentication for frontend users.
+
+        Example: `Authorization: Bearer your_jwt_token_here`
+
+  schemas:
+    ApiResponse:
+      type: object
+      required:
+        - success
+        - data
+        - error
+        - metadata
+      properties:
+        success:
+          type: boolean
+          description: Indicates if the request was successful
+        data:
+          oneOf:
+            - type: object
+            - type: array
+            - type: 'null'
+          description: Response data (null if error)
+        error:
+          oneOf:
+            - type: object
+              properties:
+                code:
+                  type: string
+                  description: Error code for programmatic handling
+                message:
+                  type: string
+                  description: Human-readable error message
+                details:
+                  type: object
+                  description: Additional error details
+            - type: 'null'
+          description: Error information (null if success)
+        metadata:
+          type: object
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+              description: Response timestamp (ISO 8601)
+            version:
+              type: string
+              description: API version
+              example: "v1"
+            requestId:
+              type: string
+              description: Unique request identifier for tracing
+
+  # Common error codes
+  x-error-codes:
+    USER_NOT_FOUND:
+      description: User with specified ID not found
+      status: 404
+    INVALID_PAIR:
+      description: Invalid currency pair format
+      status: 400
+    UNAUTHORIZED:
+      description: Missing or invalid authentication
+      status: 401
+    FORBIDDEN:
+      description: Insufficient permissions
+      status: 403
+    RATE_LIMIT_EXCEEDED:
+      description: Too many requests
+      status: 429
+    INTERNAL_ERROR:
+      description: Internal server error
+      status: 500
+    SERVICE_UNAVAILABLE:
+      description: Service temporarily unavailable
+      status: 503
+
+# Rate limiting
+x-rate-limiting:
+  discord-bot:
+    limit: 500
+    window: 60s
+  ml-engine:
+    limit: 1000
+    window: 60s
+  frontend:
+    limit: 100
+    window: 60s
+    per: user
