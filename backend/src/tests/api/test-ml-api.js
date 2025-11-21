@@ -28,6 +28,9 @@ const client = axios.create({
 let testModelId = null;
 let testPredictionId = null;
 
+// Generate unique version using timestamp
+const uniqueVersion = `2.0.0-test-${Date.now()}`;
+
 // Colors for console output
 const colors = {
   reset: '\x1b[0m',
@@ -86,7 +89,7 @@ async function testRegisterModelVersion() {
   try {
     const modelData = {
       modelName: 'signal_predictor_v2',
-      version: '2.0.0-test',
+      version: uniqueVersion,
       algorithm: 'LSTM',
       hyperparameters: {
         layers: 3,
@@ -175,14 +178,21 @@ async function testLogTrainingSession() {
   printTest('5. Log Training Session');
   try {
     const trainingLog = {
+      modelVersion: uniqueVersion,
+      trainingType: 'full',
+      dataStartDate: '2025-01-01',
+      dataEndDate: '2025-11-01',
+      numSamples: 10000,
       trainingMetrics: {
         accuracy: 0.86,
         loss: 0.21,
         epochs: 50,
+        trainSamples: 8000,
       },
       validationMetrics: {
         accuracy: 0.84,
         loss: 0.24,
+        valSamples: 2000,
       },
       hyperparameters: {
         batchSize: 32,
@@ -322,7 +332,9 @@ async function testGetPredictionAccuracy() {
 async function testGetMarketData() {
   printTest('10. Get Training Data - Market Data');
   try {
-    const response = await client.get('/training-data/market/EUR/USD', {
+    // URL encode the pair to handle the slash
+    const pair = encodeURIComponent('EUR/USD');
+    const response = await client.get(`/training-data/market/${pair}`, {
       params: {
         timeframe: '1h',
         limit: 100,

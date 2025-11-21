@@ -37,7 +37,7 @@ const registerModelVersion = async (req, res, next) => {
 
     // Check if version already exists
     const existingVersion = await ModelVersion.findOne({
-      where: { modelName, version },
+      where: { name: modelName, version },
     });
 
     if (existingVersion) {
@@ -46,14 +46,11 @@ const registerModelVersion = async (req, res, next) => {
 
     // Create model version
     const modelVersion = await ModelVersion.create({
-      modelName,
+      name: modelName,
       version,
-      algorithm,
-      hyperparameters,
-      trainingMetrics,
-      trainingDataInfo,
       description,
-      status: 'trained', // 'trained', 'testing', 'deployed', 'retired'
+      modelType: 'full', // Default to 'full' model type
+      trainedAt: new Date(),
       isActive: false, // Not active by default
     });
 
@@ -61,10 +58,10 @@ const registerModelVersion = async (req, res, next) => {
       success: true,
       data: {
         modelId: modelVersion.id,
-        modelName: modelVersion.modelName,
+        modelName: modelVersion.name,
         version: modelVersion.version,
-        algorithm: modelVersion.algorithm,
-        status: modelVersion.status,
+        modelType: modelVersion.modelType,
+        isActive: modelVersion.isActive,
         message: 'Model version registered successfully',
       },
       error: null,
@@ -113,9 +110,9 @@ const updateModelStatus = async (req, res, next) => {
       success: true,
       data: {
         modelId: modelVersion.id,
-        modelName: modelVersion.modelName,
+        modelName: modelVersion.name,
         version: modelVersion.version,
-        status: modelVersion.status,
+        modelType: modelVersion.modelType,
         isActive: modelVersion.isActive,
         message: 'Model status updated successfully',
       },
@@ -150,8 +147,7 @@ const getModelVersions = async (req, res, next) => {
 
     // Build query
     const where = {};
-    if (modelName) where.modelName = modelName;
-    if (status) where.status = status;
+    if (modelName) where.name = modelName;
     if (typeof isActive !== 'undefined') where.isActive = isActive === 'true';
 
     // Fetch models
@@ -226,6 +222,11 @@ const logTrainingSession = async (req, res, next) => {
   try {
     const { modelId } = req.params;
     const {
+      modelVersion: version,
+      trainingType = 'full',
+      dataStartDate,
+      dataEndDate,
+      numSamples,
       trainingMetrics = {},
       validationMetrics = {},
       hyperparameters = {},
@@ -234,18 +235,31 @@ const logTrainingSession = async (req, res, next) => {
     } = req.body;
 
     // Verify model exists
-    const modelVersion = await ModelVersion.findByPk(modelId);
-    if (!modelVersion) {
+    const model = await ModelVersion.findByPk(modelId);
+    if (!model) {
       throw new AppError(`Model with ID ${modelId} not found`, 404, 'MODEL_NOT_FOUND');
+    }
+
+    // Validate required fields
+    if (!version || !dataStartDate || !dataEndDate || !numSamples) {
+      throw new AppError('Missing required fields: modelVersion, dataStartDate, dataEndDate, numSamples', 400, 'MISSING_FIELDS');
     }
 
     // Create training log
     const trainingLog = await ModelTrainingLog.create({
-      modelVersionId: modelId,
-      trainingMetrics,
-      validationMetrics,
+      modelVersion: version || model.version,
+      trainingType,
+      dataStartDate: new Date(dataStartDate),
+      dataEndDate: new Date(dataEndDate),
+      numSamples: parseInt(numSamples),
+      trainSamples: trainingMetrics.trainSamples,
+      valSamples: validationMetrics.valSamples,
+      trainLoss: trainingMetrics.loss,
+      valLoss: validationMetrics.loss,
+      trainAccuracy: trainingMetrics.accuracy,
+      valAccuracy: validationMetrics.accuracy,
       hyperparameters,
-      trainingDuration: duration,
+      trainingDurationSeconds: duration,
       notes,
     });
 
@@ -355,8 +369,8 @@ const getABTests = async (req, res, next) => {
       offset: parseInt(offset),
       order: [['createdAt', 'DESC']],
       include: [
-        { model: ModelVersion, as: 'modelA', attributes: ['id', 'modelName', 'version'] },
-        { model: ModelVersion, as: 'modelB', attributes: ['id', 'modelName', 'version'] },
+        { model: ModelVersion, as: 'modelA', attributes: ['id', 'name', 'version'] },
+        { model: ModelVersion, as: 'modelB', attributes: ['id', 'name', 'version'] },
       ],
     });
 
