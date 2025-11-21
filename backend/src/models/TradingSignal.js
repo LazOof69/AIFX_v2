@@ -37,6 +37,7 @@ const TradingSignal = sequelize.define('TradingSignal', {
   signal: {
     type: DataTypes.ENUM('buy', 'sell', 'hold'),
     allowNull: false,
+    field: 'action',
   },
   confidence: {
     type: DataTypes.DECIMAL(3, 2),
@@ -99,6 +100,7 @@ const TradingSignal = sequelize.define('TradingSignal', {
   riskRewardRatio: {
     type: DataTypes.DECIMAL(4, 2),
     allowNull: true,
+    field: 'risk_reward',
     validate: {
       min: 0,
     },
@@ -159,10 +161,12 @@ const TradingSignal = sequelize.define('TradingSignal', {
   actualPnL: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: true,
+    field: 'actual_pnl',
   },
   actualPnLPercent: {
     type: DataTypes.DECIMAL(6, 2),
     allowNull: true,
+    field: 'actual_pnl_percent',
   },
   durationMinutes: {
     type: DataTypes.INTEGER,
@@ -172,10 +176,12 @@ const TradingSignal = sequelize.define('TradingSignal', {
   isNotified: {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
+    field: 'is_notified',
   },
   notifiedAt: {
     type: DataTypes.DATE,
     allowNull: true,
+    field: 'notified_at',
   },
   notificationChannels: {
     type: DataTypes.JSON,

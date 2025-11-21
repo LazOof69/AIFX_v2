@@ -355,14 +355,14 @@
         │              └──────┬──────┘               │
         │                     │                      │
    ┌────▼─────────────────────▼──────────────────────▼──────┐
-   │                  PostgreSQL Database                     │
-   │                      Port 5432                          │
+   │                  PostgreSQL Database                   │
+   │                      Port 5432                         │
    │  ┌────────────┬──────────────┬──────────────────────┐  │
-   │  │   Users    │ TradingSignal│   MarketData        │  │
-   │  │   Prefs    │   History    │   ModelVersion      │  │
-   │  │  Position  │  Notification│   ABTest            │  │
+   │  │   Users    │ TradingSignal│   MarketData         │  │
+   │  │   Prefs    │   History    │   ModelVersion       │  │
+   │  │  Position  │  Notification│   ABTest             │  │
    │  └────────────┴──────────────┴──────────────────────┘  │
-   └─────────────────────────────────────────────────────────┘
+   └────────────────────────────────────────────────────────┘
                                │
                     ┌──────────▼───────────┐
                     │   External APIs      │
@@ -1071,15 +1071,7 @@ Discord 通知層級
 
 ## 📊 附錄
 
-### A. 系統版本歷史
-
-| 版本 | 發布日期 | 主要變更 |
-|------|---------|---------|
-| v1.0 | 2024-09-30 | 初版上線，基礎功能 |
-| v1.5 | 2024-10-15 | Discord Bot 整合 |
-| v2.0 | 2024-11-20 | ML 引擎上線，反轉檢測 |
-
-### B. 相關文檔
+### A. 相關文檔
 
 - [API 文檔](backend/docs/API.md)
 - [資料庫架構](docs/setup/DATABASE_ARCHITECTURE.md)
@@ -1087,10 +1079,8 @@ Discord 通知層級
 - [測試指南](docs/testing/TESTING_ALL_PHASES.md)
 - [開發規範](CLAUDE.md)
 
-### C. 聯絡資訊
+### B. 聯絡資訊
 
-- **技術支援**: support@aifx.example.com
-- **商務合作**: business@aifx.example.com
 - **GitHub**: https://github.com/LazOof69/AIFX_v2
 
 ---

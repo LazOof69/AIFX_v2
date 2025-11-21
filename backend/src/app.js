@@ -127,13 +127,13 @@ app.use('/api/v1/trading', require('./routes/trading'));
 app.use('/api/v1/notifications', require('./routes/notifications'));
 app.use('/api/v1/positions', require('./routes/positions')); // Phase 3: Position management
 
-// Microservices API routes (Phase 2: Backend APIs for services)
+// Microservices API routes (Phase 2-3: Backend APIs for services)
 app.use('/api/v1/discord', require('./routes/api/v1/discord')); // Discord Bot APIs
+app.use('/api/v1/ml', require('./routes/api/v1/ml')); // ML Engine APIs (Phase 3)
 
 // TODO: Add additional route files when created
 // app.use('/api/v1/preferences', require('./routes/preferences'));
 // app.use('/api/v1/analytics', require('./routes/analytics'));
-// app.use('/api/v1/ml', require('./routes/api/v1/ml')); // ML Engine APIs (Phase 3)
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {

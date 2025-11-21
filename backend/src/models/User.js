@@ -30,7 +30,10 @@ const User = sequelize.define('User', {
     unique: true,
     validate: {
       len: [3, 50],
-      isAlphanumeric: true,
+      is: {
+        args: /^[a-zA-Z0-9_]+$/,
+        msg: 'Username can only contain letters, numbers, and underscores',
+      },
     },
   },
   password: {
