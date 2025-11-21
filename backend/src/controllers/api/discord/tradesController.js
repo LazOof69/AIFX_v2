@@ -239,7 +239,7 @@ const recordTrade = async (req, res, next) => {
 const updateTrade = async (req, res, next) => {
   try {
     const { tradeId } = req.params;
-    const { exitPrice, status } = req.body;
+    const { exitPrice, status, closedAt } = req.body;
 
     const trade = await UserTradingHistory.findByPk(tradeId);
 
@@ -269,6 +269,10 @@ const updateTrade = async (req, res, next) => {
     // Update status if provided
     if (status) {
       trade.status = status;
+      // Set closedAt timestamp if status is closed and not already set
+      if (status.includes('closed') && !trade.closedAt) {
+        trade.closedAt = closedAt || new Date();
+      }
     }
 
     await trade.save();
