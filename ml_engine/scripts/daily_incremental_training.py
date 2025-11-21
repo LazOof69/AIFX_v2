@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 """
-Daily Incremental Training Script
+Daily Incremental Training Script (Phase 5 Refactored)
 Performs daily fine-tuning with new market data
 
+ARCHITECTURAL CHANGE (Phase 5 Microservices Refactoring):
+- ❌ OLD: Direct PostgreSQL access via psycopg2
+- ✅ NEW: Backend API access via backend_api_client
+- Following microservices architecture principles (CLAUDE.md)
+
 Features:
-- Fetches latest market data from PostgreSQL
-- Loads existing best model
+- Fetches latest market data from Backend API (was: PostgreSQL)
+- Loads existing best model via Backend API (was: database query)
 - Performs incremental training (fine-tuning)
-- Saves new model version
-- Logs training results to database
-- Publishes Redis events
+- Saves new model version via Backend API (was: database INSERT)
+- Logs training results via Backend API (was: database INSERT/UPDATE)
+- Publishes Redis events (unchanged - Redis is OK for services)
 
 Schedule: Daily at UTC 01:00 (via cron)
 
@@ -26,14 +31,15 @@ from pathlib import Path
 import json
 import numpy as np
 import pandas as pd
-import psycopg2
-from psycopg2.extras import RealDictCursor
 import redis
 import tensorflow as tf
 from tensorflow import keras
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Phase 5: Import Backend API Client instead of psycopg2
+from services.backend_api_client import get_client
 
 # Setup logging
 log_dir = Path(__file__).parent.parent / 'logs' / 'training'
@@ -50,31 +56,36 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Environment variables
-DB_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:password@localhost:5432/aifx_v2')
 REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379')
 MODELS_DIR = Path(__file__).parent.parent / 'saved_models_v2'
 
 
 class DailyTrainer:
-    """Daily incremental training orchestrator"""
+    """Daily incremental training orchestrator (Phase 5 Refactored)"""
 
     def __init__(self, pairs, timeframes):
         self.pairs = pairs
         self.timeframes = timeframes
-        self.db_conn = None
+        # Phase 5: Use Backend API client instead of database connection
+        self.api_client = None
         self.redis_client = None
         self.training_log_id = None
         self.start_time = datetime.utcnow()
 
-    def connect_database(self):
-        """Connect to PostgreSQL database"""
+        logger.info("✅ DailyTrainer initialized (Backend API mode)")
+
+    def connect_backend_api(self):
+        """Connect to Backend API (Phase 5 Refactored)"""
         try:
-            logger.info("🔗 Connecting to PostgreSQL...")
-            self.db_conn = psycopg2.connect(DB_URL)
-            logger.info("✅ PostgreSQL connected")
+            logger.info("🔗 Initializing Backend API client...")
+            self.api_client = get_client()
+
+            # Test connection with health check
+            health = self.api_client.check_health()
+            logger.info(f"✅ Backend API connected: {health.get('status')}")
             return True
         except Exception as e:
-            logger.error(f"❌ Database connection failed: {e}")
+            logger.error(f"❌ Backend API connection failed: {e}")
             return False
 
     def connect_redis(self):
@@ -107,177 +118,141 @@ class DailyTrainer:
             logger.error(f"❌ Failed to publish event: {e}")
 
     def create_training_log(self, dataset_size):
-        """Create training log entry in database"""
+        """
+        Create training log entry via Backend API (Phase 5 Refactored)
+
+        OLD: Direct database INSERT to model_training_log
+        NEW: Backend API call to log_training_session()
+        """
         try:
-            cursor = self.db_conn.cursor(cursor_factory=RealDictCursor)
-
-            query = """
-                INSERT INTO model_training_log (
-                    training_type, model_type, dataset_size, data_time_range,
-                    status, started_at
-                )
-                VALUES (%s, %s, %s, %s, %s, %s)
-                RETURNING id
-            """
-
             time_range = {
                 'start': (self.start_time - timedelta(days=1)).isoformat(),
                 'end': self.start_time.isoformat()
             }
 
-            cursor.execute(query, (
-                'incremental',
-                'lstm',
-                dataset_size,
-                json.dumps(time_range),
-                'running',
-                self.start_time
-            ))
+            # Phase 5: Use Backend API instead of SQL INSERT
+            # Note: We need a model_id for log_training_session
+            # For now, we'll create a placeholder or skip this until we have model_id
+            # This is a known limitation that needs Backend API enhancement
 
-            result = cursor.fetchone()
-            self.training_log_id = result['id']
-            self.db_conn.commit()
+            logger.info(f"⚠️ Training log creation deferred until model registration")
+            logger.info(f"   Dataset size: {dataset_size}")
+            logger.info(f"   Time range: {time_range}")
 
-            logger.info(f"✅ Training log created: {self.training_log_id}")
+            # TODO: Backend API needs endpoint for creating training log without model_id
+            # Or: Create training log after model version is registered
 
             # Publish training started event
             self.publish_event('ml:training_started', {
-                'trainingLogId': self.training_log_id,
                 'trainingType': 'incremental',
                 'modelType': 'lstm',
                 'datasetSize': dataset_size,
                 'startedAt': self.start_time.isoformat()
             })
 
-            return self.training_log_id
+            return None  # Will create after model registration
 
         except Exception as e:
             logger.error(f"❌ Failed to create training log: {e}")
             return None
 
     def update_training_log(self, status, metrics=None, error_message=None):
-        """Update training log with results"""
-        try:
-            cursor = self.db_conn.cursor()
+        """
+        Update training log with results (Phase 5 - Limited Implementation)
 
+        Note: Backend API doesn't have UPDATE endpoint for training logs yet
+        This is a known gap that needs Backend API enhancement
+        """
+        try:
             duration = (datetime.utcnow() - self.start_time).total_seconds()
 
-            query = """
-                UPDATE model_training_log
-                SET status = %s, metrics = %s, error_message = %s,
-                    training_duration = %s, completed_at = %s
-                WHERE id = %s
-            """
-
-            cursor.execute(query, (
-                status,
-                json.dumps(metrics) if metrics else None,
-                error_message,
-                duration,
-                datetime.utcnow(),
-                self.training_log_id
-            ))
-
-            self.db_conn.commit()
-            logger.info(f"✅ Training log updated: {status}")
+            logger.info(f"✅ Training completed: {status}")
+            logger.info(f"   Metrics: {metrics}")
+            logger.info(f"   Duration: {duration:.2f}s")
 
             # Publish training completed event
             self.publish_event('ml:training_completed', {
-                'trainingLogId': self.training_log_id,
                 'status': status,
                 'metrics': metrics,
                 'duration': duration,
                 'completedAt': datetime.utcnow().isoformat()
             })
 
+            # TODO: Backend API needs endpoint for updating training logs
+            # For now, we only publish events
+
         except Exception as e:
             logger.error(f"❌ Failed to update training log: {e}")
 
     def fetch_new_data(self, days_back=1):
         """
-        Fetch new market data and labeled signals from database
+        Fetch new market data and labeled signals from Backend API (Phase 5 Refactored)
+
+        OLD: Direct SQL queries to market_data and trading_signals tables
+        NEW: Backend API calls to get_market_data() and get_historical_signals()
 
         Args:
             days_back: Number of days to fetch (default: 1)
 
         Returns:
-            DataFrame with features and labels
+            Dict with 'market_data' and 'signals' keys
         """
         try:
-            cursor = self.db_conn.cursor(cursor_factory=RealDictCursor)
-
             # Calculate date range
             end_date = self.start_time
             start_date = end_date - timedelta(days=days_back)
 
-            logger.info(f"📊 Fetching data from {start_date} to {end_date}")
+            logger.info(f"📊 Fetching data from {start_date} to {end_date} via Backend API")
 
-            # Fetch market data
-            pairs_str = "','".join(self.pairs)
-            timeframes_str = "','".join(self.timeframes)
+            all_market_data = []
+            all_signals = []
 
-            query = f"""
-                SELECT
-                    md.pair,
-                    md.timeframe,
-                    md.timestamp,
-                    md.open,
-                    md.high,
-                    md.low,
-                    md.close,
-                    md.volume,
-                    md.technical_indicators
-                FROM market_data md
-                WHERE md.pair IN ('{pairs_str}')
-                  AND md.timeframe IN ('{timeframes_str}')
-                  AND md.timestamp >= %s
-                  AND md.timestamp <= %s
-                ORDER BY md.timestamp ASC
-            """
+            # Fetch data for each pair and timeframe combination
+            for pair in self.pairs:
+                for timeframe in self.timeframes:
+                    # Phase 5: Fetch market data via Backend API
+                    logger.info(f"   Fetching market data: {pair} {timeframe}")
+                    result = self.api_client.get_market_data(
+                        pair=pair,
+                        timeframe=timeframe,
+                        start_date=start_date.isoformat(),
+                        end_date=end_date.isoformat(),
+                        limit=10000
+                    )
 
-            cursor.execute(query, (start_date, end_date))
-            market_data = cursor.fetchall()
+                    market_data = result.get('marketData', [])
+                    all_market_data.extend(market_data)
+                    logger.info(f"     ✓ Fetched {len(market_data)} candles")
 
-            logger.info(f"✅ Fetched {len(market_data)} market data records")
+                    # Phase 5: Fetch labeled signals via Backend API
+                    logger.info(f"   Fetching signals: {pair} {timeframe}")
+                    result = self.api_client.get_historical_signals(
+                        pair=pair,
+                        timeframe=timeframe,
+                        start_date=start_date.isoformat(),
+                        end_date=end_date.isoformat(),
+                        outcome=['win', 'loss'],  # Only completed signals
+                        limit=10000
+                    )
 
-            # Fetch labeled signals
-            signals_query = f"""
-                SELECT
-                    ts.pair,
-                    ts.timeframe,
-                    ts.created_at as timestamp,
-                    ts.signal,
-                    ts.confidence,
-                    ts.entry_price,
-                    ts.factors,
-                    ts.actual_outcome,
-                    ts.actual_pnl_percent
-                FROM trading_signals ts
-                WHERE ts.pair IN ('{pairs_str}')
-                  AND ts.timeframe IN ('{timeframes_str}')
-                  AND ts.created_at >= %s
-                  AND ts.created_at <= %s
-                  AND ts.actual_outcome != 'pending'
-                ORDER BY ts.created_at ASC
-            """
+                    signals = result.get('signals', [])
+                    all_signals.extend(signals)
+                    logger.info(f"     ✓ Fetched {len(signals)} labeled signals")
 
-            cursor.execute(signals_query, (start_date, end_date))
-            signals = cursor.fetchall()
-
-            logger.info(f"✅ Fetched {len(signals)} labeled signals")
+            logger.info(f"✅ Total: {len(all_market_data)} market data, {len(all_signals)} signals")
 
             return {
-                'market_data': market_data,
-                'signals': signals
+                'market_data': all_market_data,
+                'signals': all_signals
             }
 
         except Exception as e:
-            logger.error(f"❌ Failed to fetch data: {e}")
+            logger.error(f"❌ Failed to fetch data from Backend API: {e}")
             return None
 
     def prepare_training_data(self, raw_data):
         """
-        Prepare training data from raw database data
+        Prepare training data from raw API data
 
         Args:
             raw_data: Dict with market_data and signals
@@ -295,8 +270,10 @@ class DailyTrainer:
                 logger.warning("⚠️ Insufficient data for training")
                 return None, None
 
-            # TODO: Implement feature engineering
-            # For now, use simple price-based features
+            # Convert timestamps
+            market_df['timestamp'] = pd.to_datetime(market_df['timestamp'])
+            signals_df['createdAt'] = pd.to_datetime(signals_df['createdAt'])
+
             features = []
             labels = []
 
@@ -305,7 +282,7 @@ class DailyTrainer:
                 mask = (
                     (market_df['pair'] == signal['pair']) &
                     (market_df['timeframe'] == signal['timeframe']) &
-                    (market_df['timestamp'] <= signal['timestamp'])
+                    (market_df['timestamp'] <= signal['createdAt'])
                 )
 
                 recent_data = market_df[mask].tail(60)  # Last 60 candles
@@ -322,7 +299,7 @@ class DailyTrainer:
                 features.append(feature_vector)
 
                 # Label: 0 = loss, 1 = win
-                label = 1 if signal['actual_outcome'] == 'win' else 0
+                label = 1 if signal['actualOutcome'] == 'win' else 0
                 labels.append(label)
 
             X_train = np.array(features)
@@ -337,40 +314,42 @@ class DailyTrainer:
             return None, None
 
     def load_best_model(self):
-        """Load the current best performing model"""
+        """
+        Load the current best performing model via Backend API (Phase 5 Refactored)
+
+        OLD: Direct SQL query to model_versions table
+        NEW: Backend API call to get_model_versions()
+        """
         try:
-            logger.info("📦 Loading best model...")
+            logger.info("📦 Loading best model via Backend API...")
 
-            # Find latest model with 'production' status
-            cursor = self.db_conn.cursor(cursor_factory=RealDictCursor)
+            # Phase 5: Use Backend API to find production model
+            result = self.api_client.get_model_versions(
+                model_name='signal_predictor',
+                status='production',
+                limit=1
+            )
 
-            query = """
-                SELECT model_path, version
-                FROM model_versions
-                WHERE status = 'production'
-                ORDER BY created_at DESC
-                LIMIT 1
-            """
+            models = result.get('models', [])
 
-            cursor.execute(query)
-            result = cursor.fetchone()
-
-            if not result:
+            if not models or len(models) == 0:
                 logger.warning("⚠️ No production model found, will train from scratch")
                 return None
 
-            model_path = Path(result['model_path'])
+            model_info = models[0]
+            model_path = Path(model_info['modelPath'])
+
             if not model_path.exists():
                 logger.warning(f"⚠️ Model file not found: {model_path}")
                 return None
 
             model = keras.models.load_model(model_path)
-            logger.info(f"✅ Loaded model: {result['version']}")
+            logger.info(f"✅ Loaded model: {model_info['name']}:{model_info['version']}")
 
             return model
 
         except Exception as e:
-            logger.error(f"❌ Failed to load model: {e}")
+            logger.error(f"❌ Failed to load model via Backend API: {e}")
             return None
 
     def incremental_train(self, model, X_train, y_train, epochs=5):
@@ -422,9 +401,14 @@ class DailyTrainer:
             return None, None
 
     def save_model_version(self, model, metrics):
-        """Save new model version to database"""
+        """
+        Save new model version via Backend API (Phase 5 Refactored)
+
+        OLD: Direct SQL INSERT to model_versions table
+        NEW: Backend API call to register_model_version()
+        """
         try:
-            logger.info("💾 Saving model version...")
+            logger.info("💾 Saving model version via Backend API...")
 
             # Generate version number
             version = f"v_daily_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
@@ -436,64 +420,73 @@ class DailyTrainer:
 
             logger.info(f"✅ Model saved: {model_path}")
 
-            # Create database record
-            cursor = self.db_conn.cursor(cursor_factory=RealDictCursor)
+            # Phase 5: Register model via Backend API
+            result = self.api_client.register_model_version(
+                model_name='signal_predictor',
+                version=version,
+                algorithm='LSTM',
+                model_path=str(model_path),
+                hyperparameters={
+                    'layers': 3,
+                    'units': 128,
+                    'dropout': 0.2,
+                    'learning_rate': 0.0001,
+                },
+                training_metrics=metrics,
+                description=f'Daily incremental training {datetime.utcnow().strftime("%Y-%m-%d")}'
+            )
 
-            query = """
-                INSERT INTO model_versions (
-                    version, model_type, model_path, training_log_id,
-                    metrics, status, created_at
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                RETURNING id
-            """
+            model_version_id = result.get('modelId')
+            logger.info(f"✅ Model version registered via API: {model_version_id}")
 
-            cursor.execute(query, (
-                version,
-                'lstm',
-                str(model_path),
-                self.training_log_id,
-                json.dumps(metrics),
-                'staging',  # New models start in staging
-                datetime.utcnow()
-            ))
-
-            result = cursor.fetchone()
-            model_version_id = result['id']
-
-            self.db_conn.commit()
-
-            logger.info(f"✅ Model version created: {model_version_id}")
+            # Now create training log with model_id
+            if model_version_id and self.training_log_id is None:
+                try:
+                    log_result = self.api_client.log_training_session(
+                        model_id=model_version_id,
+                        model_version=version,
+                        training_type='incremental',
+                        data_start_date=(self.start_time - timedelta(days=1)).isoformat(),
+                        data_end_date=self.start_time.isoformat(),
+                        num_samples=len(metrics) if isinstance(metrics, dict) else 0,
+                        training_metrics=metrics,
+                        duration=(datetime.utcnow() - self.start_time).total_seconds(),
+                        notes='Daily incremental training'
+                    )
+                    self.training_log_id = log_result.get('logId')
+                    logger.info(f"✅ Training log created: {self.training_log_id}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to create training log: {e}")
 
             return version, model_version_id
 
         except Exception as e:
-            logger.error(f"❌ Failed to save model version: {e}")
+            logger.error(f"❌ Failed to save model version via Backend API: {e}")
             return None, None
 
     def run(self):
-        """Execute daily training workflow"""
+        """Execute daily training workflow (Phase 5 Refactored)"""
         try:
             logger.info("=" * 80)
-            logger.info("🚀 DAILY INCREMENTAL TRAINING STARTED")
+            logger.info("🚀 DAILY INCREMENTAL TRAINING STARTED (Backend API Mode)")
             logger.info(f"⏰ Time: {self.start_time.isoformat()}")
             logger.info(f"📊 Pairs: {', '.join(self.pairs)}")
             logger.info(f"⏱️ Timeframes: {', '.join(self.timeframes)}")
             logger.info("=" * 80)
 
-            # Step 1: Connect to services
-            if not self.connect_database():
-                raise Exception("Database connection failed")
+            # Step 1: Connect to Backend API
+            if not self.connect_backend_api():
+                raise Exception("Backend API connection failed")
 
             if not self.connect_redis():
                 logger.warning("⚠️ Redis connection failed, events will not be published")
 
-            # Step 2: Fetch new data
+            # Step 2: Fetch new data via Backend API
             raw_data = self.fetch_new_data(days_back=1)
             if not raw_data:
-                raise Exception("Failed to fetch data")
+                raise Exception("Failed to fetch data from Backend API")
 
-            # Step 3: Create training log
+            # Step 3: Create training log (deferred)
             dataset_size = len(raw_data['market_data']) + len(raw_data['signals'])
             self.create_training_log(dataset_size)
 
@@ -505,7 +498,7 @@ class DailyTrainer:
                 self.update_training_log('skipped', error_message='Insufficient data')
                 return
 
-            # Step 5: Load existing model
+            # Step 5: Load existing model via Backend API
             model = self.load_best_model()
 
             if model is None:
@@ -519,7 +512,7 @@ class DailyTrainer:
             if model is None:
                 raise Exception("Training failed")
 
-            # Step 7: Save new model version
+            # Step 7: Save new model version via Backend API
             version, model_id = self.save_model_version(model, metrics)
 
             if not version:
@@ -543,9 +536,8 @@ class DailyTrainer:
 
         finally:
             # Cleanup
-            if self.db_conn:
-                self.db_conn.close()
-                logger.info("✅ Database connection closed")
+            if self.api_client:
+                logger.info("✅ Backend API client session ended")
 
             if self.redis_client:
                 self.redis_client.close()
@@ -554,7 +546,7 @@ class DailyTrainer:
 
 def main():
     """Main entry point"""
-    parser = argparse.ArgumentParser(description='Daily Incremental Training')
+    parser = argparse.ArgumentParser(description='Daily Incremental Training (Backend API Mode)')
 
     parser.add_argument(
         '--pairs',

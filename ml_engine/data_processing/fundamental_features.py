@@ -12,6 +12,190 @@ Features:
 
 Author: AIFX v2 ML Engine
 Created: 2025-10-08
+
+═══════════════════════════════════════════════════════════════════════
+🚧 TODO: Phase 5 Backend API Refactoring - BLOCKED
+═══════════════════════════════════════════════════════════════════════
+
+STATUS: ⚠️ CANNOT BE REFACTORED YET - Missing Backend API Endpoints
+
+This script currently uses direct PostgreSQL access via psycopg2 (Line 22, 77).
+It violates microservices architecture principles by accessing database directly.
+
+BLOCKING ISSUE:
+--------------
+Backend API does NOT provide endpoints for fundamental economic data.
+
+REQUIRED BACKEND API ENDPOINTS:
+-------------------------------
+The following endpoints MUST be created in Backend before this script can be refactored:
+
+1. GET /api/v1/ml/training-data/fundamental
+   Query Parameters:
+   - indicator: 'interest_rate' | 'gdp' | 'cpi'
+   - countries: string[] (e.g., ['US', 'EU'])
+   - start_date: ISO8601 date
+   - end_date: ISO8601 date
+
+   Response Format:
+   {
+     "success": true,
+     "data": {
+       "fundamentalData": [
+         {
+           "date": "2024-01-01T00:00:00Z",
+           "country": "US",
+           "indicator": "interest_rate",
+           "value": 5.25,
+           "unit": "percent"
+         }
+       ]
+     }
+   }
+
+2. GET /api/v1/ml/training-data/economic-events
+   Query Parameters:
+   - currency: 'USD' | 'EUR' | 'GBP' | 'JPY'
+   - impact_levels: string[] (e.g., ['high', 'medium'])
+   - start_date: ISO8601 date
+   - end_date: ISO8601 date
+
+   Response Format:
+   {
+     "success": true,
+     "data": {
+       "events": [
+         {
+           "eventDate": "2024-01-05T14:30:00Z",
+           "currency": "USD",
+           "eventName": "Non-Farm Payrolls",
+           "impactLevel": "high",
+           "forecastValue": 180000,
+           "actualValue": 185000,
+           "previousValue": 175000
+         }
+       ]
+     }
+   }
+
+REQUIRED BACKEND DATABASE MODELS:
+---------------------------------
+Backend needs these Sequelize models (currently don't exist):
+
+1. models/FundamentalData.js
+   Fields:
+   - id: UUID primary key
+   - date: DATE (indexed)
+   - country: STRING (indexed)
+   - indicator: ENUM('interest_rate', 'gdp', 'cpi', ...) (indexed)
+   - value: DECIMAL(10,4)
+   - unit: STRING
+   - source: STRING
+   - created_at, updated_at: TIMESTAMP
+
+2. models/EconomicEvent.js
+   Fields:
+   - id: UUID primary key
+   - event_date: DATE (indexed)
+   - currency: STRING (indexed)
+   - event_name: STRING
+   - impact_level: ENUM('low', 'medium', 'high') (indexed)
+   - forecast_value: DECIMAL(20,4)
+   - actual_value: DECIMAL(20,4)
+   - previous_value: DECIMAL(20,4)
+   - created_at, updated_at: TIMESTAMP
+
+REQUIRED BACKEND CONTROLLERS:
+-----------------------------
+3. backend/src/controllers/mlTrainingDataController.js
+   Methods:
+   - getFundamentalData(req, res) - Line ~150
+   - getEconomicEvents(req, res) - Line ~250
+
+REQUIRED BACKEND ROUTES:
+------------------------
+4. backend/src/routes/mlRoutes.js (if doesn't exist, create it)
+   Add:
+   - GET /api/v1/ml/training-data/fundamental
+   - GET /api/v1/ml/training-data/economic-events
+
+REFACTORING PLAN:
+----------------
+Once Backend APIs are ready, apply this pattern:
+
+OLD CODE (Lines 75-77, 96-118):
+    def _get_connection(self):
+        return psycopg2.connect(**self.db_config)
+
+    def get_interest_rates(self, start_date, end_date, countries=None):
+        conn = self._get_connection()
+        query = "SELECT date, country, value as interest_rate FROM fundamental_data..."
+        df = pd.read_sql_query(query, conn, params=params)
+        conn.close()
+        return df
+
+NEW CODE (should become):
+    from services.backend_api_client import get_client
+
+    def __init__(self):
+        self.api_client = get_client()
+        logger.info("✅ Fundamental Feature Engineer initialized (Backend API mode)")
+
+    def get_interest_rates(self, start_date, end_date, countries=None):
+        result = self.api_client.get_fundamental_data(
+            indicator='interest_rate',
+            countries=countries,
+            start_date=start_date.isoformat(),
+            end_date=end_date.isoformat()
+        )
+
+        fundamental_data = result.get('fundamentalData', [])
+        df = pd.DataFrame(fundamental_data)
+        df['date'] = pd.to_datetime(df['date'])
+        return df
+
+ESTIMATED WORK REQUIRED:
+-----------------------
+Backend Development:
+- Create FundamentalData model + migration: 1 hour
+- Create EconomicEvent model + migration: 1 hour
+- Create mlTrainingDataController: 2 hours
+- Create mlRoutes: 30 minutes
+- Write API tests: 1.5 hours
+Total Backend: ~6 hours
+
+ML Engine Refactoring:
+- Refactor this script (617 lines): 2 hours
+- Update BackendApiClient with new methods: 1 hour
+- Test fundamental feature extraction: 1 hour
+Total ML Engine: ~4 hours
+
+GRAND TOTAL: ~10 hours
+
+PRIORITY: MEDIUM
+- This script is used by prepare_v2_training_data.py
+- Not critical for daily/weekly training (those are already refactored)
+- Should be completed in Phase 5 but can be deferred to Phase 6
+
+DEPENDENCIES:
+------------
+This script is a dependency for:
+- scripts/prepare_v2_training_data.py (Line 450-480)
+
+ACTION ITEMS:
+------------
+1. [ ] Backend team: Create fundamental data endpoints (6 hours)
+2. [ ] ML team: Update BackendApiClient (1 hour)
+3. [ ] ML team: Refactor this script (2 hours)
+4. [ ] ML team: Test end-to-end (1 hour)
+
+REFERENCE:
+---------
+- See: /root/AIFX_v2/ml_engine/PHASE5_SCRIPT_REFACTOR_PROGRESS.md
+- See: /root/AIFX_v2/MICROSERVICES_REFACTOR_PLAN.md
+- Backend API Client: /root/AIFX_v2/ml_engine/services/backend_api_client.py
+
+═══════════════════════════════════════════════════════════════════════
 """
 
 import os

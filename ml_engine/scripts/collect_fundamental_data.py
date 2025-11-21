@@ -13,6 +13,263 @@ Environment Variables:
     DB_NAME: Database name (default: aifx_v2_dev)
     DB_USER: Database user (default: postgres)
     DB_PASSWORD: Database password (default: postgres)
+
+═══════════════════════════════════════════════════════════════════════
+🚧 TODO: Phase 5 Architecture Refactoring - SHOULD MOVE TO BACKEND
+═══════════════════════════════════════════════════════════════════════
+
+STATUS: ⚠️ ARCHITECTURAL VIOLATION - Data Collection in ML Engine
+
+PROBLEM:
+-------
+This script violates microservices architecture principles:
+1. ML Engine should NOT be responsible for data collection
+2. ML Engine should focus on machine learning tasks only
+3. Data collection is a Backend service responsibility
+4. This script uses direct PostgreSQL access (Line 24: import psycopg2)
+5. This script stores FRED API key (should be Backend's secret)
+
+CURRENT ARCHITECTURE (WRONG):
+----------------------------
+ML Engine (collect_fundamental_data.py)
+    └─> Fetches data from FRED API
+    └─> Writes directly to PostgreSQL database ❌
+    └─> Manages FRED API key ❌
+
+DESIRED ARCHITECTURE (CORRECT):
+------------------------------
+Backend Service
+    └─> Scheduled job (cron/PM2) runs data collection
+    └─> Fetches data from FRED API
+    └─> Manages API keys securely
+    └─> Writes to PostgreSQL (only Backend has DB access) ✅
+    └─> Exposes data via REST API
+
+ML Engine
+    └─> Uses Backend API to read fundamental data
+    └─> Never collects external data directly ✅
+    └─> Never manages API keys ✅
+
+RECOMMENDATION:
+--------------
+🔄 MOVE this entire script to Backend service
+
+Proposed location:
+  /root/AIFX_v2/backend/src/services/dataCollection/fredDataCollector.js
+
+Or keep as Python script but run as Backend subprocess:
+  /root/AIFX_v2/backend/scripts/collect_fundamental_data.py
+
+BENEFITS OF MOVING TO BACKEND:
+------------------------------
+1. ✅ Separation of Concerns: ML Engine focuses on ML, Backend handles data
+2. ✅ Single Database Access Point: Only Backend accesses PostgreSQL
+3. ✅ Centralized API Key Management: FRED_API_KEY stays in Backend .env
+4. ✅ Centralized Scheduling: Backend PM2 manages all data collection jobs
+5. ✅ Better Security: No external API keys in ML Engine
+6. ✅ Easier Scaling: Data collection scales independently from ML
+7. ✅ API-First: ML Engine would use Backend API to access fundamental data
+
+MIGRATION PLAN:
+--------------
+Option A: Convert to Node.js Service (Recommended)
+------------------------------------------------
+1. Create backend/src/services/dataCollection/fredDataCollector.js
+2. Use axios to fetch from FRED API
+3. Use Sequelize ORM to write to FundamentalData model
+4. Schedule via PM2 ecosystem.config.js with cron
+5. Expose data via Backend API:
+   - GET /api/v1/ml/training-data/fundamental
+
+Estimated Time: 5-6 hours
+Files to Create:
+- backend/src/services/dataCollection/fredDataCollector.js (new)
+- backend/src/jobs/collectFundamentalData.js (scheduler)
+- backend/src/models/FundamentalData.js (Sequelize model)
+- backend/src/migrations/YYYYMMDDHHMMSS-create-fundamental-data.js
+- Update backend/ecosystem.config.js (cron scheduling)
+- Update backend/.env (add FRED_API_KEY)
+
+Node.js Implementation Example:
+```javascript
+// backend/src/services/dataCollection/fredDataCollector.js
+const axios = require('axios');
+const { FundamentalData } = require('../../models');
+
+class FREDDataCollector {
+  constructor(apiKey) {
+    this.apiKey = apiKey;
+    this.baseUrl = 'https://api.stlouisfed.org/fred/series/observations';
+  }
+
+  async fetchSeries(seriesId, startDate, endDate) {
+    const response = await axios.get(this.baseUrl, {
+      params: {
+        series_id: seriesId,
+        api_key: this.apiKey,
+        observation_start: startDate,
+        observation_end: endDate,
+        file_type: 'json'
+      }
+    });
+    return response.data.observations;
+  }
+
+  async collectAndStore(country, indicator, seriesId, startDate, endDate) {
+    const data = await this.fetchSeries(seriesId, startDate, endDate);
+
+    for (const observation of data) {
+      await FundamentalData.upsert({
+        date: observation.date,
+        country: country,
+        indicator: indicator,
+        value: parseFloat(observation.value),
+        source: 'FRED',
+        series_id: seriesId
+      });
+    }
+
+    console.log(`✅ Collected ${data.length} ${indicator} records for ${country}`);
+  }
+}
+
+module.exports = FREDDataCollector;
+```
+
+Option B: Keep as Python Script but Manage from Backend
+-------------------------------------------------------
+1. Move script to backend/scripts/collect_fundamental_data.py
+2. Create Node.js wrapper: backend/src/jobs/fredDataJob.js
+3. Use child_process.spawn() to run Python script
+4. Schedule via PM2 ecosystem.config.js
+5. Python script writes to database (Backend has DB access)
+
+Estimated Time: 2-3 hours
+Files to Move/Create:
+- backend/scripts/collect_fundamental_data.py (moved from ml_engine)
+- backend/src/jobs/fredDataJob.js (new wrapper)
+- Update backend/ecosystem.config.js (cron scheduling)
+- Update backend/.env (add FRED_API_KEY)
+
+Option C: API-Based Approach (Keep in ML Engine)
+------------------------------------------------
+If this script MUST stay in ML Engine:
+- Remove direct PostgreSQL access
+- Send collected data to Backend via REST API:
+  POST /api/v1/ml/training-data/fundamental (bulk insert)
+- Backend handles database writes
+- Backend manages FRED_API_KEY
+
+Estimated Time: 2-3 hours
+Changes Required:
+- Replace psycopg2 with Backend API client
+- Implement batch POST to Backend API
+- Backend must create bulk insert endpoint
+- Backend must proxy FRED API requests (or accept bulk data)
+
+SCHEDULING:
+----------
+Current: Manual execution or custom cron
+Recommended: PM2 scheduled job in Backend
+
+Example PM2 config:
+{
+  "name": "collect-fundamental-data",
+  "script": "src/jobs/collectFundamentalData.js",
+  "cron_restart": "0 2 * * 0",  // Weekly Sunday 2 AM
+  "autorestart": false,
+  "watch": false,
+  "env": {
+    "FRED_API_KEY": "your-api-key-here"
+  }
+}
+
+DATA COLLECTED BY THIS SCRIPT:
+-----------------------------
+Countries: US, EU, GB, JP
+Indicators per country:
+- interest_rate: Central bank policy rate
+- gdp: Gross Domestic Product
+- cpi: Consumer Price Index
+- unemployment: Unemployment rate
+- inflation: Year-over-year inflation
+- pmi: Manufacturing PMI
+- trade_balance: Trade balance
+
+FRED Series IDs (Lines 54-81):
+- US: FEDFUNDS, GDP, CPIAUCSL, UNRATE, FPCPITOTLZGUSA, MANEMP, BOPGSTB
+- EU: ECBDFR, CLVMNACSCAB1GQEA19, CP0000EZ19M086NEST, LRHUTTTTEZM156S
+- GB: IRSTCB01GBM156N, GBRRGDPQDSNAQ, GBRCPIALLMINMEI, LRHUTTTTGBM156S
+- JP: IRSTCI01JPM156N, JPNRGDPEXP, JPNCPIALLMINMEI, LRHUTTTTJPM156S
+
+PRIORITY: LOW
+-------------
+- This script is for v2.0 advanced features (fundamental analysis)
+- Not critical for current v1.0 production system
+- Can be completed in Phase 6 (Backend enhancement phase)
+- Daily/weekly training (v1.0) doesn't depend on this
+- FRED data updates infrequently (monthly/quarterly)
+
+DEPENDENCIES:
+------------
+This script collects data that is used by:
+- data_processing/fundamental_features.py (Lines 79-210: get_interest_rates, get_gdp_data, get_cpi_data)
+- scripts/prepare_v2_training_data.py (v2.0 multi-input training)
+
+CURRENT DATABASE ACCESS (Lines 200-350):
+----------------------------------------
+This script directly:
+- Connects to PostgreSQL (Line 210: psycopg2.connect)
+- Queries fundamental_data table (Line 230)
+- Inserts/updates fundamental data (Lines 250-280)
+❌ ALL OF THIS SHOULD BE IN BACKEND
+
+ESTIMATED TOTAL WORK:
+--------------------
+Option A (Node.js): 5-6 hours
+Option B (Python + wrapper): 2-3 hours
+Option C (API-based): 2-3 hours
+
+RECOMMENDED: Option A (Full Node.js rewrite)
+- Modern, maintainable code
+- Native integration with Backend
+- Better error handling and logging
+- Easier to extend with more data sources
+- Sequelize ORM for database operations
+
+SECURITY CONSIDERATIONS:
+-----------------------
+FRED API Key Management:
+- Current: Stored in ML Engine .env ❌
+- Desired: Stored in Backend .env only ✅
+- Backend can rate-limit FRED requests
+- Backend can cache FRED responses (Redis)
+- Backend can implement retry logic
+
+API Rate Limits:
+- FRED API: 120 requests/minute
+- Should implement exponential backoff
+- Should cache responses (1 day TTL for historical data)
+
+ACTION ITEMS:
+------------
+1. [ ] Decide on migration approach (A, B, or C)
+2. [ ] Move FRED_API_KEY to Backend .env
+3. [ ] Create Backend service/job for FRED data collection
+4. [ ] Create FundamentalData Sequelize model in Backend
+5. [ ] Implement scheduling via PM2
+6. [ ] Test end-to-end data collection flow
+7. [ ] Verify ML Engine can access fundamental data via Backend API
+8. [ ] Remove this script from ml_engine/ (after migration)
+
+REFERENCE:
+---------
+- FRED API Docs: https://fred.stlouisfed.org/docs/api/fred/
+- Architecture plan: /root/AIFX_v2/MICROSERVICES_REFACTOR_PLAN.md
+- Progress tracking: /root/AIFX_v2/ml_engine/PHASE5_SCRIPT_REFACTOR_PROGRESS.md
+- Backend API: /root/AIFX_v2/backend/src/routes/mlRoutes.js (future)
+
+═══════════════════════════════════════════════════════════════════════
 """
 
 import os

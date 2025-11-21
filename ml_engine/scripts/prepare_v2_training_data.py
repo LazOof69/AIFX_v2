@@ -9,6 +9,123 @@ This script prepares training data for the Multi-Input LSTM model by combining:
 
 Architecture: v2.0 Multi-Input LSTM
 Created: 2025-10-08
+
+═══════════════════════════════════════════════════════════════════════
+🚧 TODO: Phase 5 Backend API Refactoring - BLOCKED (Dependency)
+═══════════════════════════════════════════════════════════════════════
+
+STATUS: ⚠️ CANNOT BE REFACTORED YET - Depends on fundamental_features.py
+
+This script DOES NOT directly access the database, but it DEPENDS on:
+  - data_processing/fundamental_features.py (Line 26)
+
+BLOCKING DEPENDENCY:
+-------------------
+The fundamental_features.py module (Line 26) uses direct PostgreSQL access.
+Until that module is refactored to use Backend API, this script CANNOT be
+fully compliant with microservices architecture.
+
+DEPENDENCY CHAIN:
+----------------
+prepare_v2_training_data.py (THIS FILE)
+  └─> imports FundamentalFeatureEngineer (Line 26)
+       └─> from data_processing.fundamental_features
+            └─> Uses psycopg2 for database access ❌
+
+SPECIFIC USAGE:
+--------------
+This script uses fundamental_features.py in these methods:
+1. Line 64: self.fundamental_engineer = FundamentalFeatureEngineer(db_config)
+2. Line 140-180: get_fundamental_features() method
+   - Calls self.fundamental_engineer.get_all_features()
+   - This internally uses direct database queries
+
+REFACTORING PREREQUISITES:
+-------------------------
+Before this script can be refactored, the following MUST be completed:
+
+1. ✅ Backend API endpoints for fundamental data must be created
+   - GET /api/v1/ml/training-data/fundamental
+   - GET /api/v1/ml/training-data/economic-events
+
+2. ✅ fundamental_features.py must be refactored to use Backend API
+   - Remove psycopg2 usage
+   - Use BackendApiClient instead
+   - See TODO in fundamental_features.py for details
+
+3. ✅ This script must update its initialization
+   - Remove db_config parameter passing
+   - Ensure FundamentalFeatureEngineer uses Backend API
+
+REFACTORING PLAN:
+----------------
+Once fundamental_features.py is refactored, this script needs MINIMAL changes:
+
+OLD CODE (Lines 32-64):
+    def __init__(self, db_config=None, output_dir=None):
+        if db_config is None:
+            db_config = {
+                'host': os.getenv('DB_HOST', 'localhost'),
+                'port': int(os.getenv('DB_PORT', 5432)),
+                'database': os.getenv('DB_NAME', 'aifx_v2_dev'),
+                'user': os.getenv('DB_USER', 'postgres'),
+                'password': os.getenv('DB_PASSWORD', 'postgres')
+            }
+        self.fundamental_engineer = FundamentalFeatureEngineer(db_config)
+
+NEW CODE (should become):
+    def __init__(self, output_dir=None):
+        # FundamentalFeatureEngineer now uses Backend API internally
+        # No database configuration needed
+        self.fundamental_engineer = FundamentalFeatureEngineer()
+
+ESTIMATED WORK REQUIRED:
+-----------------------
+Once fundamental_features.py is refactored:
+- Update __init__ method: 15 minutes
+- Remove db_config parameters: 15 minutes
+- Update argparse CLI arguments: 15 minutes
+- Test end-to-end data preparation: 1 hour
+Total: ~2 hours
+
+PRIORITY: MEDIUM
+- This script is for v2.0 Multi-Input LSTM (advanced feature)
+- Not critical for current v1.0 production system
+- Daily/weekly training scripts (v1.0) are already refactored ✅
+- Can be completed in Phase 5 or deferred to Phase 6
+
+CURRENT STATUS:
+--------------
+- prepare_features_from_db.py: ✅ REFACTORED (v1.0 features)
+- daily_incremental_training.py: ✅ REFACTORED (v1.0 training)
+- weekly_full_training.py: ✅ REFACTORED (v1.0 training)
+- fundamental_features.py: ⏳ PENDING (blocked by Backend API)
+- prepare_v2_training_data.py: ⏳ PENDING (blocked by fundamental_features.py)
+
+TESTING REQUIREMENTS:
+--------------------
+After refactoring, verify:
+1. [ ] Script can run without database credentials
+2. [ ] Fundamental features are correctly loaded via API
+3. [ ] Multi-input data format is preserved
+4. [ ] Normalization/scaling still works correctly
+5. [ ] Output files are identical to pre-refactor version
+
+ACTION ITEMS:
+------------
+1. [ ] Wait for fundamental_features.py refactoring (dependency)
+2. [ ] Update this script's initialization (2 hours)
+3. [ ] Remove all db_config references
+4. [ ] Test v2.0 data preparation pipeline
+
+REFERENCE:
+---------
+- Blocking dependency: /root/AIFX_v2/ml_engine/data_processing/fundamental_features.py
+- Progress tracking: /root/AIFX_v2/ml_engine/PHASE5_SCRIPT_REFACTOR_PROGRESS.md
+- Architecture plan: /root/AIFX_v2/MICROSERVICES_REFACTOR_PLAN.md
+- Backend API Client: /root/AIFX_v2/ml_engine/services/backend_api_client.py
+
+═══════════════════════════════════════════════════════════════════════
 """
 
 import os

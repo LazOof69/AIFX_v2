@@ -22,6 +22,165 @@ Examples:
 
     # Collect specific date range
     python collect_economic_calendar.py --start-date 2024-01-01 --end-date 2024-12-31
+
+═══════════════════════════════════════════════════════════════════════
+🚧 TODO: Phase 5 Architecture Refactoring - SHOULD MOVE TO BACKEND
+═══════════════════════════════════════════════════════════════════════
+
+STATUS: ⚠️ ARCHITECTURAL VIOLATION - Data Collection in ML Engine
+
+PROBLEM:
+-------
+This script violates microservices architecture principles:
+1. ML Engine should NOT be responsible for data collection
+2. ML Engine should focus on machine learning tasks only
+3. Data collection is a Backend service responsibility
+4. This script uses direct PostgreSQL access (Line 33: import psycopg2)
+
+CURRENT ARCHITECTURE (WRONG):
+----------------------------
+ML Engine (collect_economic_calendar.py)
+    └─> Fetches data from Investing.com API
+    └─> Writes directly to PostgreSQL database ❌
+
+DESIRED ARCHITECTURE (CORRECT):
+------------------------------
+Backend Service
+    └─> Scheduled job (cron/PM2) runs data collection
+    └─> Fetches data from external APIs
+    └─> Writes to PostgreSQL (only Backend has DB access) ✅
+
+ML Engine
+    └─> Uses Backend API to read economic events
+    └─> Never collects external data directly ✅
+
+RECOMMENDATION:
+--------------
+🔄 MOVE this entire script to Backend service
+
+Proposed location:
+  /root/AIFX_v2/backend/src/services/dataCollection/economicCalendar.js
+
+Or keep as Python script but run as Backend subprocess:
+  /root/AIFX_v2/backend/scripts/collect_economic_calendar.py
+
+BENEFITS OF MOVING TO BACKEND:
+------------------------------
+1. ✅ Separation of Concerns: ML Engine focuses on ML, Backend handles data
+2. ✅ Single Database Access Point: Only Backend accesses PostgreSQL
+3. ✅ Centralized Scheduling: Backend PM2 can manage all data collection jobs
+4. ✅ Better Security: No database credentials in ML Engine
+5. ✅ Easier Scaling: Data collection scales independently from ML
+6. ✅ API-First: ML Engine would use Backend API to access events
+
+MIGRATION PLAN:
+--------------
+Option A: Convert to Node.js Service (Recommended)
+------------------------------------------------
+1. Create backend/src/services/dataCollection/economicCalendar.js
+2. Use npm package like 'node-fetch' or 'axios' to fetch from Investing.com API
+3. Use Sequelize ORM to write to EconomicEvent model
+4. Schedule via PM2 ecosystem.config.js with cron
+5. Expose data via existing Backend API:
+   - GET /api/v1/ml/training-data/economic-events
+
+Estimated Time: 4-5 hours
+Files to Create:
+- backend/src/services/dataCollection/economicCalendar.js (new)
+- backend/src/jobs/collectEconomicCalendar.js (scheduler)
+- Update backend/ecosystem.config.js (cron scheduling)
+
+Option B: Keep as Python Script but Manage from Backend
+-------------------------------------------------------
+1. Move script to backend/scripts/collect_economic_calendar.py
+2. Create Node.js wrapper: backend/src/jobs/economicCalendarJob.js
+3. Use child_process.spawn() to run Python script
+4. Schedule via PM2 ecosystem.config.js
+5. Python script still writes to database (Backend has DB access)
+
+Estimated Time: 2-3 hours
+Files to Move/Create:
+- backend/scripts/collect_economic_calendar.py (moved from ml_engine)
+- backend/src/jobs/economicCalendarJob.js (new wrapper)
+- Update backend/ecosystem.config.js (cron scheduling)
+
+ALTERNATIVE (If Keeping in ML Engine):
+--------------------------------------
+If this script MUST stay in ML Engine, at minimum:
+- Remove direct PostgreSQL access
+- Send collected data to Backend via REST API:
+  POST /api/v1/ml/training-data/economic-events (bulk insert)
+- Let Backend handle database writes
+
+Estimated Time: 2 hours
+Changes Required:
+- Replace psycopg2 with Backend API client
+- Implement batch POST to Backend API
+- Backend must create bulk insert endpoint
+
+SCHEDULING:
+----------
+Current: Manual execution or custom cron
+Recommended: PM2 scheduled job in Backend
+
+Example PM2 config:
+{
+  "name": "collect-economic-calendar",
+  "script": "src/jobs/collectEconomicCalendar.js",
+  "cron_restart": "0 0 * * *",  // Daily at midnight
+  "autorestart": false,
+  "watch": false
+}
+
+PRIORITY: LOW
+-------------
+- This script is for v2.0 advanced features (fundamental analysis)
+- Not critical for current v1.0 production system
+- Can be completed in Phase 6 (Backend enhancement phase)
+- Daily/weekly training (v1.0) doesn't depend on this
+
+DEPENDENCIES:
+------------
+This script collects data that is used by:
+- data_processing/fundamental_features.py (Line 211-265: get_economic_events)
+- scripts/prepare_v2_training_data.py (v2.0 multi-input training)
+
+CURRENT DATABASE ACCESS (Lines 180-230):
+----------------------------------------
+This script directly:
+- Connects to PostgreSQL (Line 186: psycopg2.connect)
+- Queries economic_events table (Line 200)
+- Inserts/updates events (Lines 210-225)
+❌ ALL OF THIS SHOULD BE IN BACKEND
+
+ESTIMATED TOTAL WORK:
+--------------------
+Option A (Node.js): 4-5 hours
+Option B (Python + wrapper): 2-3 hours
+Option C (API-based): 2 hours
+
+RECOMMENDED: Option B (Python script managed by Backend)
+- Keeps existing Python code
+- Quick to implement
+- Maintains Backend as sole DB accessor
+- Easy to schedule with PM2
+
+ACTION ITEMS:
+------------
+1. [ ] Decide on migration approach (A, B, or C)
+2. [ ] Create Backend service/job for economic calendar collection
+3. [ ] Move or refactor this script
+4. [ ] Update scheduling to use PM2
+5. [ ] Test end-to-end data collection flow
+6. [ ] Verify ML Engine can access events via Backend API
+
+REFERENCE:
+---------
+- Architecture plan: /root/AIFX_v2/MICROSERVICES_REFACTOR_PLAN.md
+- Progress tracking: /root/AIFX_v2/ml_engine/PHASE5_SCRIPT_REFACTOR_PROGRESS.md
+- Backend API: /root/AIFX_v2/backend/src/routes/mlRoutes.js (future)
+
+═══════════════════════════════════════════════════════════════════════
 """
 
 import os
