@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 """
-Prepare Training Features from PostgreSQL Real Market Data
+Prepare Training Features from Backend API (Phase 5 Refactored)
 
-Purpose: Extract market data from PostgreSQL, calculate technical indicators,
+Purpose: Extract market data from Backend API, calculate technical indicators,
          and prepare feature sets for ML training
 
 Author: Claude Code
 Created: 2025-10-20
+Updated: 2025-11-21 (Phase 5 Microservices Refactoring)
+
+ARCHITECTURAL CHANGE:
+- ❌ OLD: Direct PostgreSQL access via psycopg2
+- ✅ NEW: Backend API access via backend_api_client
+- Following microservices architecture principles (CLAUDE.md)
 
 Flow:
-1. Load OHLCV data from market_data table (yfinance source)
+1. Load OHLCV data from Backend API (was: market_data table)
 2. Calculate technical indicators
 3. Split into train/val/test sets (time-based)
 4. Save features to CSV for training pipeline
@@ -26,15 +32,17 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 import pandas as pd
 import numpy as np
-import psycopg2
 import logging
 from datetime import datetime
 import json
 import os
 from dotenv import load_dotenv
 
+# Phase 5: Import Backend API Client instead of psycopg2
+from services.backend_api_client import get_client
+
 # Load environment variables
-load_dotenv(Path(__file__).parent.parent.parent / 'backend' / '.env')
+load_dotenv(Path(__file__).parent.parent / '.env')
 
 # Setup logging
 logging.basicConfig(
@@ -42,16 +50,6 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-
-# Database configuration
-DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': int(os.getenv('DB_PORT', 5432)),
-    'database': os.getenv('DB_NAME', 'aifx_v2_dev'),
-    'user': os.getenv('DB_USER', 'postgres'),
-    'password': os.getenv('DB_PASSWORD', 'postgres')
-}
 
 # Data splits (time-based for time series)
 SPLIT_DATES = {
@@ -71,21 +69,26 @@ SPLIT_DATES = {
 
 
 class FeaturePreparator:
-    """Prepare training features from PostgreSQL market data"""
+    """Prepare training features from Backend API market data"""
 
     def __init__(self, output_dir=None):
-        """Initialize preparator"""
+        """Initialize preparator with Backend API client"""
         if output_dir is None:
             output_dir = Path(__file__).parent.parent / 'data' / 'training_v3'
 
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"Output directory: {self.output_dir}")
+        # Phase 5: Initialize Backend API client
+        self.api_client = get_client()
+
+        logger.info(f"✅ Feature Preparator initialized (Backend API mode)")
+        logger.info(f"   Output directory: {self.output_dir}")
+        logger.info(f"   Backend API URL: {self.api_client.base_url}")
 
     def load_market_data(self, pair, timeframe='1h'):
         """
-        Load market data from PostgreSQL
+        Load market data from Backend API (Phase 5 Refactored)
 
         Args:
             pair (str): Currency pair (e.g., 'EUR/USD')
@@ -95,43 +98,43 @@ class FeaturePreparator:
             pandas.DataFrame: OHLCV data with timestamp index
         """
         logger.info(f"\n{'='*80}")
-        logger.info(f"Loading market data: {pair} {timeframe}")
+        logger.info(f"Loading market data via Backend API: {pair} {timeframe}")
         logger.info(f"{'='*80}")
 
         try:
-            conn = psycopg2.connect(**DB_CONFIG)
-
-            query = """
-                SELECT timestamp, open, high, low, close, volume
-                FROM market_data
-                WHERE pair = %s
-                  AND timeframe = %s
-                  AND source = 'yfinance'
-                ORDER BY timestamp ASC
-            """
-
-            df = pd.read_sql_query(
-                query,
-                conn,
-                params=(pair, timeframe),
-                index_col='timestamp',
-                parse_dates=['timestamp']
+            # Phase 5: Use Backend API instead of direct database access
+            result = self.api_client.get_market_data(
+                pair=pair,
+                timeframe=timeframe,
+                limit=50000  # Get large dataset
             )
 
-            conn.close()
+            market_data = result['marketData']
+
+            if not market_data or len(market_data) == 0:
+                logger.error("❌ No market data returned from API")
+                return pd.DataFrame()
+
+            # Convert API response to DataFrame
+            df = pd.DataFrame(market_data)
+
+            # Set timestamp as index
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            df = df.set_index('timestamp')
 
             # Convert to numeric
             for col in ['open', 'high', 'low', 'close', 'volume']:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
 
-            logger.info(f"✅ Loaded {len(df)} candles")
+            logger.info(f"✅ Loaded {len(df)} candles via Backend API")
             logger.info(f"   Date range: {df.index.min()} to {df.index.max()}")
             logger.info(f"   Missing values: {df.isnull().sum().sum()}")
 
             return df
 
         except Exception as e:
-            logger.error(f"❌ Failed to load market data: {e}")
+            logger.error(f"❌ Failed to load market data from Backend API: {e}")
             raise
 
     def calculate_technical_indicators(self, df):
@@ -275,7 +278,8 @@ class FeaturePreparator:
         metadata = {
             'pair': pair,
             'version': '3.0',
-            'source': 'yfinance_real_data',
+            'source': 'backend_api',  # Phase 5: Changed from yfinance_real_data
+            'data_source_type': 'rest_api',
             'generated_at': datetime.now().isoformat(),
             'splits': {
                 split_name: {
@@ -308,14 +312,14 @@ class FeaturePreparator:
             timeframe (str): Timeframe
         """
         logger.info("="*80)
-        logger.info("FEATURE PREPARATION FROM POSTGRESQL")
+        logger.info("FEATURE PREPARATION FROM BACKEND API (Phase 5 Refactored)")
         logger.info("="*80)
 
-        # Load market data
+        # Load market data via Backend API
         df = self.load_market_data(pair, timeframe)
 
         if df.empty:
-            logger.error("❌ No market data loaded")
+            logger.error("❌ No market data loaded from Backend API")
             return
 
         # Calculate technical indicators
@@ -337,7 +341,7 @@ def main():
     preparator = FeaturePreparator()
 
     # Prepare features for EUR/USD (1h timeframe)
-    logger.info("\n🔄 Preparing EUR/USD features...")
+    logger.info("\n🔄 Preparing EUR/USD features via Backend API...")
     preparator.prepare_features(pair='EUR/USD', timeframe='1h')
 
     logger.info("\n✅ ALL FEATURES PREPARED")
