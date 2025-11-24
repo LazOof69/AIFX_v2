@@ -17,6 +17,10 @@ const ModelTrainingLog = require('./ModelTrainingLog');
 const ModelVersion = require('./ModelVersion');
 const ModelABTest = require('./ModelABTest');
 
+// Signal Change Notification models
+const UserSubscription = require('./UserSubscription');
+const SignalChangeHistory = require('./SignalChangeHistory');
+
 // Establish model relationships
 
 /**
@@ -206,4 +210,7 @@ module.exports = {
   ModelTrainingLog,
   ModelVersion,
   ModelABTest,
+  // Signal Change Notification models
+  UserSubscription,
+  SignalChangeHistory,
 };

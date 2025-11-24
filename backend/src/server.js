@@ -56,10 +56,10 @@ const startServer = async () => {
       marketDataCollector.start();
       console.log('✅ Market data collector service started (collects every 15 minutes)');
 
-      // Start position monitoring service (Phase 3)
-      console.log('🔄 Starting position monitoring service...');
-      monitoringService.startMonitoring();
-      console.log('✅ Position monitoring service started (checks every 60 seconds)');
+      // Position monitoring service DISABLED (removed by user request)
+      // console.log('🔄 Starting position monitoring service...');
+      // monitoringService.startMonitoring();
+      // console.log('✅ Position monitoring service started (checks every 60 seconds)');
 
       // Start signal monitoring service (Discord notifications)
       console.log('🔄 Starting signal monitoring service...');
@@ -81,8 +81,9 @@ const gracefulShutdown = async () => {
   console.log('🛑 Stopping market data collector service...');
   await marketDataCollector.stop();
 
-  console.log('🛑 Stopping position monitoring service...');
-  monitoringService.stopMonitoring();
+  // Position monitoring service DISABLED
+  // console.log('🛑 Stopping position monitoring service...');
+  // monitoringService.stopMonitoring();
 
   console.log('🛑 Stopping signal monitoring service...');
   await signalMonitoringService.stop();

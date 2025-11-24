@@ -130,6 +130,7 @@ app.use('/api/v1/positions', require('./routes/positions')); // Phase 3: Positio
 // Microservices API routes (Phase 2-3: Backend APIs for services)
 app.use('/api/v1/discord', require('./routes/api/v1/discord')); // Discord Bot APIs
 app.use('/api/v1/ml', require('./routes/api/v1/ml')); // ML Engine APIs (Phase 3)
+app.use('/api/v1/subscriptions', require('./routes/api/v1/subscriptions')); // Signal Change Subscriptions (MVP)
 
 // TODO: Add additional route files when created
 // app.use('/api/v1/preferences', require('./routes/preferences'));

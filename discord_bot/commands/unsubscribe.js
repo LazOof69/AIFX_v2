@@ -1,90 +1,82 @@
 /**
  * Unsubscribe Command
- * Allows users to unsubscribe from trading signal notifications
+ * Allows users to unsubscribe from signal change notifications
  */
 
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder } = require('discord.js');
 const axios = require('axios');
 const logger = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('unsubscribe')
-    .setDescription('Unsubscribe from trading signal notifications')
+    .setDescription('Unsubscribe from signal change notifications')
     .addStringOption(option =>
       option
         .setName('pair')
-        .setDescription('Currency pair to unsubscribe from (leave empty for all)')
+        .setDescription('Currency pair (e.g., EUR/USD)')
+        .setRequired(true)
+    )
+    .addStringOption(option =>
+      option
+        .setName('timeframe')
+        .setDescription('Timeframe')
         .setRequired(false)
+        .addChoices(
+          { name: '1 Hour', value: '1h' },
+          { name: '4 Hours', value: '4h' },
+          { name: '1 Day', value: '1d' }
+        )
     ),
 
   async execute(interaction) {
     try {
       await interaction.deferReply({ ephemeral: true });
 
-      const pair = interaction.options.getString('pair')?.toUpperCase();
-      const userId = interaction.user.id;
-      const username = interaction.user.username;
+      const pair = interaction.options.getString('pair').toUpperCase();
+      const timeframe = interaction.options.getString('timeframe') || '1h';
 
-      // Validate pair format if provided
-      if (pair && !pair.match(/^[A-Z]{3}\/[A-Z]{3}$/)) {
-        return await interaction.editReply({
-          content: '❌ Invalid currency pair format. Please use format: XXX/XXX (e.g., EUR/USD)',
-          ephemeral: true
-        });
-      }
-
-      // Call backend API to unsubscribe
+      // Call backend API
       const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:3000';
-      const response = await axios.post(
-        `${backendUrl}/api/v1/notifications/unsubscribe`,
+      const apiKey = process.env.DISCORD_BOT_API_KEY;
+
+      const response = await axios.delete(
+        `${backendUrl}/api/v1/subscriptions/user/${interaction.user.id}/pair/${encodeURIComponent(pair)}?timeframe=${timeframe}`,
         {
-          discordUserId: userId,
-          discordUsername: username,
-          pair: pair || 'all'
-        },
-        {
-          timeout: 10000
+          headers: {
+            'x-api-key': apiKey
+          }
         }
       );
 
       if (response.data.success) {
-        const embed = new EmbedBuilder()
-          .setColor(0xFF9900)
-          .setTitle('✅ Unsubscribed Successfully')
-          .setDescription(
-            pair
-              ? `You have been unsubscribed from **${pair}** trading signals.`
-              : 'You have been unsubscribed from **all** trading signals.'
-          )
-          .setFooter({ text: 'AIFX_v2 Trading Bot' })
-          .setTimestamp();
+        await interaction.editReply({
+          content: `✅ Successfully unsubscribed from **${pair}** (${timeframe}).`
+        });
 
-        await interaction.editReply({ embeds: [embed], ephemeral: true });
-
-        logger.info(`User ${username} (${userId}) unsubscribed from ${pair || 'all'}`);
+        logger.info(`User ${interaction.user.username} unsubscribed from ${pair} (${timeframe})`);
       } else {
-        throw new Error(response.data.error || 'Unsubscribe failed');
+        await interaction.editReply({
+          content: `❌ Failed to unsubscribe: ${response.data.error}`
+        });
       }
+
     } catch (error) {
       logger.error('Unsubscribe command error:', error);
 
       let errorMessage = '❌ Failed to unsubscribe. Please try again later.';
 
       if (error.response?.status === 404) {
-        errorMessage = '❌ No active subscriptions found.';
-      } else if (error.response?.status === 429) {
-        errorMessage = '❌ Too many requests. Please wait a moment and try again.';
-      } else if (error.code === 'ECONNREFUSED') {
-        errorMessage = '❌ Backend service is unavailable. Please contact an administrator.';
-      } else if (error.message) {
-        errorMessage = `❌ Error: ${error.message}`;
+        errorMessage = '⚠️ You are not subscribed to this pair.';
+      } else if (error.response?.data?.error) {
+        errorMessage = `❌ ${error.response.data.error}`;
       }
 
-      await interaction.editReply({
-        content: errorMessage,
-        ephemeral: true
-      });
+      try {
+        await interaction.editReply({ content: errorMessage });
+      } catch (replyError) {
+        logger.error('Failed to send error message:', replyError);
+      }
     }
   }
 };

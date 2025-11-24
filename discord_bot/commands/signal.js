@@ -72,7 +72,44 @@ module.exports = {
 
       // CRITICAL: Defer immediately - backend API takes ~1 second
       // Must acknowledge within 3 seconds or Discord times out
-      await interaction.deferReply();
+      let deferredSuccessfully = false;
+      try {
+        await interaction.deferReply();
+        deferredSuccessfully = true;
+        logger.info('✅ Successfully deferred interaction');
+      } catch (deferError) {
+        logger.error('Interaction has already been acknowledged.', {
+          age: Date.now() - interaction.createdTimestamp,
+          code: deferError.code
+        });
+
+        // Error 40060 means interaction was already acknowledged
+        // This can happen due to race conditions or duplicate events
+        // CRITICAL: Must verify interaction.deferred state, not just trust error code
+        if (deferError.code === 40060) {
+          // Check if defer actually succeeded by verifying interaction state
+          if (interaction.deferred) {
+            deferredSuccessfully = true;
+            logger.info('✅ Defer succeeded despite error (race condition - verified)');
+          } else {
+            // 40060 but not deferred means interaction is invalid/expired
+            logger.error('❌ Error 40060 but interaction NOT deferred - invalid interaction', {
+              age: Date.now() - interaction.createdTimestamp,
+              deferred: interaction.deferred,
+              replied: interaction.replied
+            });
+            return; // Exit - cannot respond to invalid interaction
+          }
+        } else if (deferError.code === 10062) {
+          // Unknown interaction - it expired before we could acknowledge
+          logger.warn('❌ Interaction expired (10062), cannot respond');
+          return; // Exit early - can't respond to expired interaction
+        } else {
+          // Other error - log and exit
+          logger.error('❌ Unexpected defer error:', deferError);
+          return;
+        }
+      }
 
       const pair = interaction.options.getString('pair').toUpperCase();
       const timeframe = interaction.options.getString('timeframe') || '1h';
@@ -88,7 +125,7 @@ module.exports = {
 
       // Call backend API to get signal
       const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:3000';
-      const apiKey = process.env.BACKEND_API_KEY;
+      const apiKey = process.env.DISCORD_BOT_API_KEY;
 
       const headers = {};
       if (apiKey) {
@@ -148,23 +185,8 @@ module.exports = {
               inline: true
             },
             {
-              name: '🛑 Stop Loss',
-              value: signalData.stopLoss?.toFixed(5) || 'N/A',
-              inline: true
-            },
-            {
-              name: '🎯 Take Profit',
-              value: signalData.takeProfit?.toFixed(5) || 'N/A',
-              inline: true
-            },
-            {
               name: '📊 Market Condition',
               value: signalData.marketCondition?.toUpperCase() || 'N/A',
-              inline: true
-            },
-            {
-              name: '⚖️ Risk/Reward Ratio',
-              value: signalData.riskRewardRatio ? `1:${signalData.riskRewardRatio}` : 'N/A',
               inline: true
             },
             {
@@ -197,8 +219,13 @@ module.exports = {
           }
         }
 
-        // Always use editReply since we deferred at the start
-        await interaction.editReply({ embeds: [embed] });
+        // Use editReply or update based on how we acknowledged
+        if (deferredSuccessfully || interaction.deferred) {
+          await interaction.editReply({ embeds: [embed] });
+        } else {
+          // We used reply() instead of defer, so edit that reply
+          await interaction.editReply({ content: null, embeds: [embed] });
+        }
 
         logger.info(`Signal requested by ${interaction.user.username} for ${pair} (${timeframe})`);
       } else {

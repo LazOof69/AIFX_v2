@@ -172,6 +172,18 @@ async function initializeRedis() {
     });
 
     logger.info('Subscribed to trading-signals channel');
+
+    // Subscribe to signal-change channel (MVP: Signal Change Notifications)
+    await redisSubscriber.subscribe('signal-change', async (message) => {
+      try {
+        const event = JSON.parse(message);
+        await handleSignalChangeNotification(event);
+      } catch (error) {
+        logger.error('Error handling signal-change event:', error);
+      }
+    });
+
+    logger.info('Subscribed to signal-change channel');
   } catch (error) {
     logger.error('Failed to initialize Redis:', error);
     logger.warn('Bot will continue without Redis pub/sub functionality');
@@ -260,6 +272,67 @@ async function handleNotification(notification) {
 
   } catch (error) {
     logger.error('Error sending notification:', error);
+  }
+}
+
+/**
+ * Handle signal change notification from backend
+ * MVP: Signal Change Notifications Feature
+ */
+async function handleSignalChangeNotification(event) {
+  try {
+    logger.info(`📬 Received signal-change event: ${event.pair} (${event.timeframe})`);
+
+    const channelId = process.env.DISCORD_SIGNAL_CHANNEL_ID;
+    if (!channelId) {
+      logger.warn('DISCORD_SIGNAL_CHANNEL_ID not set, cannot send notification');
+      return;
+    }
+
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    if (!channel) {
+      logger.error(`Channel ${channelId} not found`);
+      return;
+    }
+
+    // Format user mentions
+    const mentions = event.subscribers.map(s => `<@${s.id}>`).join(' ');
+
+    // Determine emoji based on signal
+    let emoji = '⚪';
+    if (event.newSignal === 'buy') emoji = '🟢';
+    if (event.newSignal === 'sell') emoji = '🔴';
+
+    // Format message
+    let message = `${emoji} **Signal Change Alert**\n\n`;
+    message += `**${event.pair}** (${event.timeframe})\n`;
+    message += `${event.oldSignal ? event.oldSignal.toUpperCase() : 'N/A'} → **${event.newSignal.toUpperCase()}**\n\n`;
+    message += `📊 Confidence: ${(event.newConfidence * 100).toFixed(0)}%\n`;
+    message += `💪 Strength: ${event.signalStrength?.toUpperCase() || 'N/A'}\n`;
+    message += `📈 Market: ${event.marketCondition?.toUpperCase() || 'N/A'}\n`;
+
+    if (event.entryPrice) {
+      message += `💰 Entry Price: ${event.entryPrice.toFixed(5)}\n`;
+    }
+
+    if (event.indicators) {
+      message += `\n📉 Indicators:\n`;
+      if (event.indicators.sma) {
+        message += `SMA(${event.indicators.sma.period}): ${event.indicators.sma.value.toFixed(5)} (${event.indicators.sma.signal})\n`;
+      }
+      if (event.indicators.rsi) {
+        message += `RSI(${event.indicators.rsi.period}): ${event.indicators.rsi.value.toFixed(2)} (${event.indicators.rsi.signal})\n`;
+      }
+    }
+
+    message += `\n👥 ${mentions}`;
+    message += `\n⏰ ${new Date().toLocaleString()}`;
+
+    await channel.send(message);
+    logger.info(`✅ Signal change notification sent to ${event.subscribers.length} subscribers`);
+
+  } catch (error) {
+    logger.error('Error sending signal change notification:', error);
   }
 }
 
