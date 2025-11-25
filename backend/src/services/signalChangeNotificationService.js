@@ -54,8 +54,8 @@ class SignalChangeNotificationService {
         'signal-monitoring-service'  // Special user ID
       );
 
-      const newSignal = newSignalData.signal.signal;  // buy/hold/sell
-      const newConfidence = newSignalData.signal.confidence;
+      const newSignal = newSignalData.signal;  // buy/hold/sell
+      const newConfidence = newSignalData.confidence;
 
       // Get last recorded signal from history
       const lastHistory = await SignalChangeHistory.findOne({
@@ -78,8 +78,8 @@ class SignalChangeNotificationService {
           newSignal,
           oldConfidence,
           newConfidence,
-          signalStrength: newSignalData.signal.signalStrength,
-          marketCondition: newSignalData.signal.marketCondition,
+          signalStrength: newSignalData.signalStrength,
+          marketCondition: newSignalData.marketCondition,
           notificationSent: false,
           createdAt: new Date()
         });
@@ -99,10 +99,10 @@ class SignalChangeNotificationService {
             newSignal,
             oldConfidence,
             newConfidence,
-            signalStrength: newSignalData.signal.signalStrength,
-            marketCondition: newSignalData.signal.marketCondition,
-            entryPrice: newSignalData.signal.entryPrice,
-            indicators: newSignalData.signal.technicalData?.indicators,
+            signalStrength: newSignalData.signalStrength,
+            marketCondition: newSignalData.marketCondition,
+            entryPrice: newSignalData.entryPrice,
+            indicators: newSignalData.technicalData?.indicators,
             subscribers: subscribers.map(s => ({
               id: s.discordUserId,
               username: s.discordUsername
