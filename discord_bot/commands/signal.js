@@ -10,17 +10,29 @@ const logger = require('../utils/logger');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('signal')
-    .setDescription('Get real-time trading signal for a currency pair')
+    .setDescription('獲取貨幣對的即時交易信號 | Get real-time trading signal')
     .addStringOption(option =>
       option
         .setName('pair')
-        .setDescription('Currency pair (e.g., EUR/USD)')
+        .setDescription('貨幣對 (例如: EUR/USD) | Currency pair')
         .setRequired(true)
     )
     .addStringOption(option =>
       option
+        .setName('period')
+        .setDescription('交易週期 | Trading period ⭐推薦使用')
+        .setRequired(false)
+        .addChoices(
+          { name: '🔥 日內交易 (快進快出，當天平倉)', value: '日內' },
+          { name: '📈 周內交易 (波段操作) ⭐推薦新手', value: '周內' },
+          { name: '📊 月內交易 (趨勢跟隨)', value: '月內' },
+          { name: '🎯 季內交易 (長期持有)', value: '季內' }
+        )
+    )
+    .addStringOption(option =>
+      option
         .setName('timeframe')
-        .setDescription('Timeframe for analysis')
+        .setDescription('[舊版參數] 技術時間框架 | Legacy timeframe parameter')
         .setRequired(false)
         .addChoices(
           { name: '15 Minutes', value: '15min' },
@@ -112,16 +124,29 @@ module.exports = {
       }
 
       const pair = interaction.options.getString('pair').toUpperCase();
-      const timeframe = interaction.options.getString('timeframe') || '1h';
+      const period = interaction.options.getString('period');
+      const timeframe = interaction.options.getString('timeframe');
 
       // Validate pair format
       if (!pair.match(/^[A-Z]{3}\/[A-Z]{3}$/)) {
         return await interaction.editReply({
-          content: '❌ Invalid currency pair format. Please use format: XXX/XXX (e.g., EUR/USD)'
+          content: '❌ 貨幣對格式錯誤 | Invalid currency pair format. Please use format: XXX/XXX (e.g., EUR/USD)'
         });
       }
 
-      // Note: bot.js already acknowledged the interaction (either deferred or replied)
+      // Prepare API parameters (prioritize period over timeframe)
+      const apiParams = { pair };
+      if (period) {
+        apiParams.period = period;
+        logger.info(`User ${interaction.user.username} requesting signal with period: ${period}`);
+      } else if (timeframe) {
+        apiParams.timeframe = timeframe;
+        logger.info(`User ${interaction.user.username} requesting signal with legacy timeframe: ${timeframe}`);
+      } else {
+        // Default to swing trading (周內交易)
+        apiParams.period = '周內';
+        logger.info(`User ${interaction.user.username} requesting signal with default period: 周內`);
+      }
 
       // Call backend API to get signal
       const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:3000';
@@ -136,10 +161,7 @@ module.exports = {
       const response = await axios.get(
         `${backendUrl}/api/v1/trading/signal`,
         {
-          params: {
-            pair: pair,      // axios handles URL encoding automatically
-            timeframe: timeframe
-          },
+          params: apiParams,
           headers: headers,
           timeout: 30000
         }
@@ -159,44 +181,57 @@ module.exports = {
         else if (signalData.signalStrength === 'strong') strengthEmoji = '⭐⭐⭐';
         else if (signalData.signalStrength === 'moderate') strengthEmoji = '⭐⭐';
 
+        // Build embed with period info if available
         const embed = new EmbedBuilder()
           .setColor(color)
           .setTitle(`📊 Trading Signal: ${pair}`)
-          .setDescription(`**Signal:** ${signalData.signal.toUpperCase()} ${strengthEmoji}`)
-          .addFields(
-            {
-              name: '💪 Confidence',
-              value: `${(signalData.confidence * 100).toFixed(0)}%`,
-              inline: true
-            },
-            {
-              name: '📈 Signal Strength',
-              value: signalData.signalStrength.replace('_', ' ').toUpperCase(),
-              inline: true
-            },
-            {
-              name: '⏰ Timeframe',
-              value: timeframe.toUpperCase(),
-              inline: true
-            },
-            {
-              name: '💰 Entry Price',
-              value: signalData.entryPrice?.toFixed(5) || 'N/A',
-              inline: true
-            },
-            {
-              name: '📊 Market Condition',
-              value: signalData.marketCondition?.toUpperCase() || 'N/A',
-              inline: true
-            },
-            {
-              name: '📦 Position Size',
-              value: signalData.positionSize ? `${signalData.positionSize}%` : 'N/A',
-              inline: true
-            }
-          )
-          .setFooter({ text: '⚠️ ' + signalData.riskWarning })
-          .setTimestamp();
+          .setDescription(`**Signal:** ${signalData.signal.toUpperCase()} ${strengthEmoji}`);
+
+        // Add period information if available (NEW)
+        if (signalData.periodInfo) {
+          const pi = signalData.periodInfo;
+          embed.addFields({
+            name: `${pi.emoji} 交易週期 | Trading Period`,
+            value: `**${pi.nameCn}** (${pi.nameEn})\n⏰ 持倉時長: ${pi.holdingPeriod}\n⚠️ 風險等級: ${pi.riskLevelCn}\n👥 適合: ${pi.targetAudience}`,
+            inline: false
+          });
+        }
+
+        // Add signal data fields
+        embed.addFields(
+          {
+            name: '💪 Confidence',
+            value: `${(signalData.confidence * 100).toFixed(0)}%`,
+            inline: true
+          },
+          {
+            name: '📈 Signal Strength',
+            value: signalData.signalStrength.replace('_', ' ').toUpperCase(),
+            inline: true
+          },
+          {
+            name: '🎯 Analysis Timeframe',
+            value: signalData.timeframe.toUpperCase(),
+            inline: true
+          },
+          {
+            name: '💰 Entry Price',
+            value: signalData.entryPrice?.toFixed(5) || 'N/A',
+            inline: true
+          },
+          {
+            name: '📊 Market Condition',
+            value: signalData.marketCondition?.toUpperCase() || 'N/A',
+            inline: true
+          },
+          {
+            name: '📦 Position Size',
+            value: signalData.positionSize ? `${signalData.positionSize}%` : 'N/A',
+            inline: true
+          }
+        )
+        .setFooter({ text: '⚠️ ' + signalData.riskWarning })
+        .setTimestamp();
 
         // Add technical indicators if available
         if (signalData.technicalData?.indicators) {
