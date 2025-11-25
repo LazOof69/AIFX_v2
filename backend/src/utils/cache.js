@@ -490,4 +490,9 @@ module.exports = {
   // Constants
   CACHE_TTL,
   CACHE_PREFIX,
+
+  // Redis client instance (for pub/sub)
+  get redisClient() {
+    return redisClient;
+  },
 };

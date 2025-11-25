@@ -6,6 +6,7 @@
 const { app, server } = require('./app');
 const { testConnection, syncDatabase } = require('./config/database');
 const { handleUnhandledRejection, handleUncaughtException } = require('./middleware/errorHandler');
+const { initializeRedis, closeConnection } = require('./utils/cache');
 const monitoringService = require('./services/monitoringService');
 const marketDataCollector = require('./services/marketDataCollector');
 const signalMonitoringService = require('./services/signalMonitoringService');
@@ -22,6 +23,15 @@ process.on('unhandledRejection', handleUnhandledRejection);
 const startServer = async () => {
   try {
     console.log('🔄 Starting AIFX_v2 Backend Server...');
+
+    // Initialize Redis connection
+    try {
+      await initializeRedis();
+      console.log('✅ Redis cache initialized');
+    } catch (redisError) {
+      console.warn('⚠️  Redis initialization failed, continuing without cache:', redisError.message);
+      // Don't exit - Redis is optional for basic functionality
+    }
 
     // Test database connection
     const dbConnected = await testConnection();
@@ -87,6 +97,10 @@ const gracefulShutdown = async () => {
 
   console.log('🛑 Stopping signal monitoring service...');
   await signalMonitoringService.stop();
+
+  // Close Redis connection
+  console.log('🛑 Closing Redis connection...');
+  await closeConnection();
 
   // Close server
   server.close(() => {

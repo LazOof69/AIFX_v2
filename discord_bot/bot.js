@@ -278,6 +278,7 @@ async function handleNotification(notification) {
 /**
  * Handle signal change notification from backend
  * MVP: Signal Change Notifications Feature
+ * Phase 2: Enhanced with Discord Embed formatting
  */
 async function handleSignalChangeNotification(event) {
   try {
@@ -298,37 +299,86 @@ async function handleSignalChangeNotification(event) {
     // Format user mentions
     const mentions = event.subscribers.map(s => `<@${s.id}>`).join(' ');
 
-    // Determine emoji based on signal
+    // Determine embed color based on signal
+    let embedColor = 0x808080; // Gray for hold
     let emoji = '⚪';
-    if (event.newSignal === 'buy') emoji = '🟢';
-    if (event.newSignal === 'sell') emoji = '🔴';
+    if (event.newSignal === 'buy') {
+      embedColor = 0x00ff00; // Green for buy
+      emoji = '🟢';
+    } else if (event.newSignal === 'sell') {
+      embedColor = 0xff0000; // Red for sell
+      emoji = '🔴';
+    }
 
-    // Format message
-    let message = `${emoji} **Signal Change Alert**\n\n`;
-    message += `**${event.pair}** (${event.timeframe})\n`;
-    message += `${event.oldSignal ? event.oldSignal.toUpperCase() : 'N/A'} → **${event.newSignal.toUpperCase()}**\n\n`;
-    message += `📊 Confidence: ${(event.newConfidence * 100).toFixed(0)}%\n`;
-    message += `💪 Strength: ${event.signalStrength?.toUpperCase() || 'N/A'}\n`;
-    message += `📈 Market: ${event.marketCondition?.toUpperCase() || 'N/A'}\n`;
+    // Build embed
+    const embed = {
+      color: embedColor,
+      title: `${emoji} Signal Change Alert`,
+      description: `**${event.pair}** (${event.timeframe})`,
+      fields: [
+        {
+          name: '📊 Signal Change',
+          value: `${event.oldSignal ? event.oldSignal.toUpperCase() : 'INITIAL'} → **${event.newSignal.toUpperCase()}**`,
+          inline: true
+        },
+        {
+          name: '📈 Confidence',
+          value: `${(event.newConfidence * 100).toFixed(0)}%`,
+          inline: true
+        },
+        {
+          name: '💪 Strength',
+          value: event.signalStrength?.toUpperCase() || 'N/A',
+          inline: true
+        },
+        {
+          name: '📉 Market Condition',
+          value: event.marketCondition?.toUpperCase() || 'N/A',
+          inline: true
+        }
+      ],
+      timestamp: new Date().toISOString(),
+      footer: {
+        text: 'AIFX v2 Trading Signals'
+      }
+    };
 
+    // Add entry price if available
     if (event.entryPrice) {
-      message += `💰 Entry Price: ${event.entryPrice.toFixed(5)}\n`;
+      embed.fields.push({
+        name: '💰 Entry Price',
+        value: event.entryPrice.toFixed(5),
+        inline: true
+      });
     }
 
+    // Add indicators if available
     if (event.indicators) {
-      message += `\n📉 Indicators:\n`;
+      const indicatorFields = [];
+
       if (event.indicators.sma) {
-        message += `SMA(${event.indicators.sma.period}): ${event.indicators.sma.value.toFixed(5)} (${event.indicators.sma.signal})\n`;
+        indicatorFields.push(`SMA(${event.indicators.sma.period}): ${event.indicators.sma.value.toFixed(5)} (${event.indicators.sma.signal})`);
       }
+
       if (event.indicators.rsi) {
-        message += `RSI(${event.indicators.rsi.period}): ${event.indicators.rsi.value.toFixed(2)} (${event.indicators.rsi.signal})\n`;
+        indicatorFields.push(`RSI(${event.indicators.rsi.period}): ${event.indicators.rsi.value.toFixed(2)} (${event.indicators.rsi.signal})`);
+      }
+
+      if (indicatorFields.length > 0) {
+        embed.fields.push({
+          name: '📉 Technical Indicators',
+          value: indicatorFields.join('\n'),
+          inline: false
+        });
       }
     }
 
-    message += `\n👥 ${mentions}`;
-    message += `\n⏰ ${new Date().toLocaleString()}`;
+    // Send embed with mentions
+    await channel.send({
+      content: `👥 ${mentions}`,
+      embeds: [embed]
+    });
 
-    await channel.send(message);
     logger.info(`✅ Signal change notification sent to ${event.subscribers.length} subscribers`);
 
   } catch (error) {

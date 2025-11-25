@@ -70,6 +70,33 @@ class SignalChangeNotificationService {
       if (oldSignal !== newSignal) {
         logger.info(`🚨 Signal change detected: ${pair} (${timeframe}): ${oldSignal || 'null'} → ${newSignal}`);
 
+        // Check notification cooldown (30 minutes)
+        const COOLDOWN_MINUTES = 30;
+        const now = new Date();
+        if (lastHistory && lastHistory.lastNotifiedAt) {
+          const minutesSinceLastNotification = (now - new Date(lastHistory.lastNotifiedAt)) / 1000 / 60;
+          if (minutesSinceLastNotification < COOLDOWN_MINUTES) {
+            logger.info(`⏳ Cooldown active for ${pair} (${timeframe}): ${minutesSinceLastNotification.toFixed(1)}/${COOLDOWN_MINUTES} minutes elapsed`);
+            logger.info(`📝 Signal change recorded but notification skipped (cooldown)`);
+
+            // Still save to history but don't send notification
+            await SignalChangeHistory.create({
+              pair,
+              timeframe,
+              oldSignal,
+              newSignal,
+              oldConfidence,
+              newConfidence,
+              signalStrength: newSignalData.signalStrength,
+              marketCondition: newSignalData.marketCondition,
+              notificationSent: false,
+              createdAt: new Date()
+            });
+
+            return; // Skip notification
+          }
+        }
+
         // Save to history
         const history = await SignalChangeHistory.create({
           pair,

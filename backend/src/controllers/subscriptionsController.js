@@ -40,6 +40,19 @@ exports.createSubscription = async (req, res) => {
       });
     }
 
+    // Check subscription limit (5 per user)
+    const MAX_SUBSCRIPTIONS = 5;
+    const userSubscriptionCount = await UserSubscription.count({
+      where: { discordUserId }
+    });
+
+    if (userSubscriptionCount >= MAX_SUBSCRIPTIONS) {
+      return res.status(429).json({
+        success: false,
+        error: `Subscription limit reached. Maximum ${MAX_SUBSCRIPTIONS} subscriptions per user.`
+      });
+    }
+
     // Check if subscription already exists
     const existing = await UserSubscription.findOne({
       where: {
