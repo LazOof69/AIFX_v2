@@ -9,6 +9,7 @@ const { authenticate, authenticateFlexible } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/errorHandler');
 const Joi = require('joi');
 const logger = require('../utils/logger');
+const { mapPeriodToTimeframe, getPeriodInfo } = require('../utils/periodMapper');
 
 const router = express.Router();
 
@@ -25,9 +26,14 @@ const signalParamSchema = Joi.object({
 });
 
 const signalQuerySchema = Joi.object({
+  // New parameter: Trading period (日內、周內、月內、季內)
+  period: Joi.string()
+    .valid('日內', '周內', '月內', '季內', 'intraday', 'swing', 'position', 'longterm', 'day', 'week', 'month', 'quarter')
+    .optional(),
+  // Legacy parameter: Timeframe (保持向後兼容)
   timeframe: Joi.string()
     .valid('1min', '5min', '15min', '30min', '1h', '4h', '1d', '1w', '1M')
-    .default('1h'),
+    .optional(),
   riskLevel: Joi.number().min(1).max(10).default(5)
 });
 
@@ -125,7 +131,7 @@ router.get(
   '/signal',
   authenticateFlexible,
   asyncHandler(async (req, res) => {
-    const { pair, timeframe = '1h', riskLevel } = req.query;
+    const { pair, period, timeframe: legacyTimeframe, riskLevel } = req.query;
 
     // Validate pair is provided
     if (!pair) {
@@ -147,7 +153,20 @@ router.get(
       });
     }
 
-    logger.info(`User ${req.user.id} requesting signal for ${pair}`);
+    // Handle period parameter (NEW) with fallback to timeframe (LEGACY)
+    let timeframe;
+    let periodInfo = null;
+
+    if (period) {
+      // New: Use period parameter
+      timeframe = mapPeriodToTimeframe(period);
+      periodInfo = getPeriodInfo(period);
+      logger.info(`User ${req.user.id} requesting signal for ${pair} using period: ${period} (mapped to ${timeframe})`);
+    } else {
+      // Legacy: Use timeframe parameter
+      timeframe = legacyTimeframe || '1h';
+      logger.info(`User ${req.user.id} requesting signal for ${pair} using legacy timeframe: ${timeframe}`);
+    }
 
     // Get user preferences
     const userPreferences = req.user.preferences || {};
@@ -161,6 +180,21 @@ router.get(
       userPreferences: userPreferences,
       userId: req.user.id
     });
+
+    // Add period information to response if period was used
+    if (periodInfo) {
+      signal.periodInfo = {
+        code: periodInfo.code,
+        nameCn: periodInfo.nameCn,
+        nameEn: periodInfo.nameEn,
+        holdingPeriod: periodInfo.holdingPeriod,
+        holdingPeriodEn: periodInfo.holdingPeriodEn,
+        riskLevel: periodInfo.riskLevel,
+        riskLevelCn: periodInfo.riskLevelCn,
+        targetAudience: periodInfo.targetAudience,
+        emoji: periodInfo.emoji
+      };
+    }
 
     res.status(200).json({
       success: true,
