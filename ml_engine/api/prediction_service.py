@@ -4,9 +4,11 @@ Unified Prediction Service for AIFX_v2 ML Engine
 
 Provides high-level prediction API for reversal detection and direction classification.
 Supports multiple model versions and A/B testing.
+Integrates sentiment analysis for enhanced predictions.
 
 Author: AI-assisted
 Created: 2025-10-16
+Updated: 2025-11-27 - Added sentiment analysis integration
 """
 
 import numpy as np
@@ -16,6 +18,7 @@ from datetime import datetime
 import json
 
 from api.model_manager import ModelManager, ModelVersion
+from services.sentiment_analyzer import SentimentAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -33,22 +36,27 @@ class PredictionService:
             model_manager: ModelManager instance
         """
         self.model_manager = model_manager
-        logger.info("Prediction Service initialized")
+        self.sentiment_analyzer = SentimentAnalyzer()
+        logger.info("Prediction Service initialized with sentiment analysis")
 
-    def predict_reversal(self, market_data: np.ndarray, version: str = None) -> Dict:
+    def predict_reversal(self, market_data: np.ndarray, pair: str = None, timeframe: str = "1h", version: str = None) -> Dict:
         """
-        Predict reversal using two-stage model
+        Predict reversal using two-stage model with sentiment analysis
 
         Args:
             market_data: Preprocessed market data (1, sequence_length, num_features)
+            pair: Currency pair (e.g., "EUR/USD") for sentiment analysis
+            timeframe: Trading timeframe (e.g., "1h", "1d")
             version: Model version to use (None = use active version)
 
         Returns:
             dict: Prediction result
-                - signal: 'none', 'long', or 'short'
+                - signal: 'hold', 'long', or 'short'
                 - confidence: Overall confidence (0.0-1.0)
                 - stage1_prob: Reversal probability
                 - stage2_prob: Direction probability (if reversal detected)
+                - sentiment_score: Sentiment score (0.0-1.0, if pair provided)
+                - factors: {technical, sentiment, pattern}
                 - model_version: Version used for prediction
                 - timestamp: Prediction timestamp
         """
@@ -116,11 +124,27 @@ class PredictionService:
                         signal = 'short'
                         confidence = short_prob
 
+                    # Analyze sentiment if pair is provided
+                    sentiment_result = None
+                    if pair:
+                        try:
+                            sentiment_result = self.sentiment_analyzer.analyze_sentiment(pair, timeframe)
+                            logger.info(f"Sentiment for {pair}: {sentiment_result['signal']} (score: {sentiment_result['sentiment_score']:.2f})")
+                        except Exception as e:
+                            logger.warning(f"Sentiment analysis failed: {e}")
+
                     result = {
                         'signal': signal,
                         'confidence': float(confidence),
                         'stage1_prob': float(max(long_prob, short_prob)),  # Reversal probability
                         'stage2_prob': float(long_prob if signal == 'long' else short_prob) if signal != 'hold' else None,
+                        'sentiment_score': sentiment_result['sentiment_score'] if sentiment_result else 0.5,
+                        'sentiment_signal': sentiment_result['signal'] if sentiment_result else 'neutral',
+                        'factors': {
+                            'technical': float(max(long_prob, short_prob)),
+                            'sentiment': sentiment_result['sentiment_score'] if sentiment_result else 0.5,
+                            'pattern': float(long_prob if signal == 'long' else short_prob) if signal != 'hold' else 0.5
+                        },
                         'model_version': model_version.version,
                         'timestamp': datetime.utcnow().isoformat() + 'Z'
                     }
@@ -146,12 +170,26 @@ class PredictionService:
 
             # Check if reversal detected
             if has_reversal_prob < model_version.threshold:
-                # No reversal detected
+                # No reversal detected - add sentiment analysis
+                sentiment_result = None
+                if pair:
+                    try:
+                        sentiment_result = self.sentiment_analyzer.analyze_sentiment(pair, timeframe)
+                    except Exception as e:
+                        logger.warning(f"Sentiment analysis failed: {e}")
+
                 result = {
                     'signal': 'hold',  # Changed from 'none' to 'hold' for consistency with backend
                     'confidence': float(1.0 - has_reversal_prob),
                     'stage1_prob': float(has_reversal_prob),
                     'stage2_prob': None,
+                    'sentiment_score': sentiment_result['sentiment_score'] if sentiment_result else 0.5,
+                    'sentiment_signal': sentiment_result['signal'] if sentiment_result else 'neutral',
+                    'factors': {
+                        'technical': float(has_reversal_prob),
+                        'sentiment': sentiment_result['sentiment_score'] if sentiment_result else 0.5,
+                        'pattern': 0.5
+                    },
                     'model_version': model_version.version,
                     'timestamp': datetime.utcnow().isoformat() + 'Z'
                 }
@@ -161,11 +199,27 @@ class PredictionService:
             # Stage 2: Determine direction
             if not model_version.stage2_model:
                 logger.warning("Stage 2 model not available, returning hold signal")
+
+                # Add sentiment analysis
+                sentiment_result = None
+                if pair:
+                    try:
+                        sentiment_result = self.sentiment_analyzer.analyze_sentiment(pair, timeframe)
+                    except Exception as e:
+                        logger.warning(f"Sentiment analysis failed: {e}")
+
                 result = {
                     'signal': 'hold',
                     'confidence': float(has_reversal_prob),
                     'stage1_prob': float(has_reversal_prob),
                     'stage2_prob': None,
+                    'sentiment_score': sentiment_result['sentiment_score'] if sentiment_result else 0.5,
+                    'sentiment_signal': sentiment_result['signal'] if sentiment_result else 'neutral',
+                    'factors': {
+                        'technical': float(has_reversal_prob),
+                        'sentiment': sentiment_result['sentiment_score'] if sentiment_result else 0.5,
+                        'pattern': 0.5
+                    },
                     'model_version': model_version.version,
                     'timestamp': datetime.utcnow().isoformat() + 'Z',
                     'warning': 'Stage 2 model not available'
@@ -182,11 +236,27 @@ class PredictionService:
             # Overall confidence: weighted average (Stage 1: 40%, Stage 2: 60%)
             overall_confidence = (has_reversal_prob * 0.4) + (direction_confidence * 0.6)
 
+            # Analyze sentiment if pair is provided
+            sentiment_result = None
+            if pair:
+                try:
+                    sentiment_result = self.sentiment_analyzer.analyze_sentiment(pair, timeframe)
+                    logger.info(f"Sentiment for {pair}: {sentiment_result['signal']} (score: {sentiment_result['sentiment_score']:.2f})")
+                except Exception as e:
+                    logger.warning(f"Sentiment analysis failed: {e}")
+
             result = {
                 'signal': signal,
                 'confidence': float(overall_confidence),
                 'stage1_prob': float(has_reversal_prob),
                 'stage2_prob': float(direction_prob),
+                'sentiment_score': sentiment_result['sentiment_score'] if sentiment_result else 0.5,
+                'sentiment_signal': sentiment_result['signal'] if sentiment_result else 'neutral',
+                'factors': {
+                    'technical': float(has_reversal_prob),
+                    'sentiment': sentiment_result['sentiment_score'] if sentiment_result else 0.5,
+                    'pattern': float(direction_prob)
+                },
                 'model_version': model_version.version,
                 'timestamp': datetime.utcnow().isoformat() + 'Z'
             }

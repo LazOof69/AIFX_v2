@@ -28,6 +28,12 @@ python-dotenv>=1.0.0
 httpx>=0.24.0
 requests>=2.31.0
 
+# Sentiment Analysis (Added 2025-11-27, Enhanced 2025-11-28)
+transformers>=4.30.0  # HuggingFace transformers for FinBERT
+torch>=2.0.0  # PyTorch backend for transformers
+newsapi-python>=0.2.7  # NewsAPI client
+vaderSentiment>=3.3.2  # VADER sentiment analyzer (backup method)
+
 # Logging
 loguru>=0.7.0
 

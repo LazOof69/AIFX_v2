@@ -128,7 +128,7 @@ const getHistoricalData = async (pair, timeframe = '1hour', limit = 100) => {
       console.log(`✅ Cache hit for ${pair} ${normalizedTimeframe} historical data`);
       return {
         success: true,
-        data: JSON.parse(cachedData),
+        data: cachedData, // cache.get() already parses JSON
         cached: true,
         timestamp: new Date().toISOString(),
       };

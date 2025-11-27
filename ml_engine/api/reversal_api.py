@@ -274,7 +274,12 @@ async def predict_reversal(request: ReversalPredictionRequest):
             )
 
         # Make prediction
-        prediction = service.predict_reversal(market_data, version=request.version)
+        prediction = service.predict_reversal(
+            market_data,
+            pair=request.pair,
+            timeframe=request.timeframe,
+            version=request.version
+        )
 
         # Format response
         response_data = {
@@ -284,11 +289,14 @@ async def predict_reversal(request: ReversalPredictionRequest):
             "confidence": prediction['confidence'],
             "stage1_prob": prediction['stage1_prob'],
             "stage2_prob": prediction['stage2_prob'],
+            "sentiment_score": prediction.get('sentiment_score', 0.5),
+            "sentiment_signal": prediction.get('sentiment_signal', 'neutral'),
             "model_version": prediction['model_version'],
-            "factors": {
-                "reversal_detected": prediction['stage1_prob'] >= 0.5,
-                "direction": prediction['signal'] if prediction['signal'] != 'hold' else None
-            },
+            "factors": prediction.get('factors', {
+                "technical": prediction.get('stage1_prob', 0.0),
+                "sentiment": prediction.get('sentiment_score', 0.5),
+                "pattern": prediction.get('stage2_prob', 0.0)
+            }),
             "timestamp": prediction['timestamp']
         }
 
@@ -461,7 +469,12 @@ async def predict_reversal_raw(request: ReversalPredictionRequest):
             )
 
         # Make prediction
-        prediction = service.predict_reversal(market_data, version=request.version)
+        prediction = service.predict_reversal(
+            market_data,
+            pair=request.pair,
+            timeframe=request.timeframe,
+            version=request.version
+        )
 
         # Format response
         response_data = {
@@ -471,11 +484,14 @@ async def predict_reversal_raw(request: ReversalPredictionRequest):
             "confidence": prediction['confidence'],
             "stage1_prob": prediction['stage1_prob'],
             "stage2_prob": prediction['stage2_prob'],
+            "sentiment_score": prediction.get('sentiment_score', 0.5),
+            "sentiment_signal": prediction.get('sentiment_signal', 'neutral'),
             "model_version": prediction['model_version'],
-            "factors": {
-                "reversal_detected": prediction['stage1_prob'] >= 0.5,
-                "direction": prediction['signal'] if prediction['signal'] != 'hold' else None
-            },
+            "factors": prediction.get('factors', {
+                "technical": prediction.get('stage1_prob', 0.0),
+                "sentiment": prediction.get('sentiment_score', 0.5),
+                "pattern": prediction.get('stage2_prob', 0.0)
+            }),
             "timestamp": prediction['timestamp']
         }
 

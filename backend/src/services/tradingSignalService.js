@@ -101,6 +101,8 @@ class TradingSignalService {
         signal: finalSignal,
         confidence: parseFloat(finalConfidence.toFixed(2)),
         factors: factors,
+        sentimentScore: mlPrediction?.sentiment_score || factors.sentiment || 0.5,
+        sentimentSignal: mlPrediction?.sentiment_signal || 'neutral',
         mlEnhanced: mlEnhanced,
         entryPrice: currentPrice,
         stopLoss: riskParams.stopLoss,
@@ -446,11 +448,13 @@ class TradingSignalService {
         return {
           prediction: prediction.signal, // 'hold', 'long', or 'short'
           confidence: prediction.confidence,
-          factors: {
+          factors: prediction.factors || {
             technical: prediction.stage1_prob || 0.5,
-            sentiment: 0.5, // Placeholder
+            sentiment: prediction.sentiment_score || 0.5,
             pattern: prediction.stage2_prob || 0.5
           },
+          sentiment_score: prediction.sentiment_score || 0.5,
+          sentiment_signal: prediction.sentiment_signal || 'neutral',
           model_version: prediction.model_version,
           timestamp: prediction.timestamp
         };

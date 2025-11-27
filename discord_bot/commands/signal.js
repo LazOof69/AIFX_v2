@@ -215,7 +215,7 @@ module.exports = {
             inline: true
           },
           {
-            name: '💰 Entry Price',
+            name: '💰 Current Price',
             value: signalData.entryPrice?.toFixed(5) || 'N/A',
             inline: true
           },
@@ -225,8 +225,10 @@ module.exports = {
             inline: true
           },
           {
-            name: '📦 Position Size',
-            value: signalData.positionSize ? `${signalData.positionSize}%` : 'N/A',
+            name: '📰 Market Sentiment',
+            value: signalData.sentimentScore
+              ? `${(signalData.sentimentScore * 100).toFixed(1)}% ${this.getSentimentEmoji(signalData.sentimentSignal)}`
+              : 'N/A',
             inline: true
           }
         )
@@ -293,6 +295,23 @@ module.exports = {
       } catch (replyError) {
         logger.error('Failed to send error message:', replyError);
       }
+    }
+  },
+
+  /**
+   * Get emoji for sentiment signal
+   * @param {string} sentimentSignal - bullish, bearish, or neutral
+   * @returns {string} Emoji representing the sentiment
+   */
+  getSentimentEmoji(sentimentSignal) {
+    switch (sentimentSignal?.toLowerCase()) {
+      case 'bullish':
+        return '🐂'; // Bull
+      case 'bearish':
+        return '🐻'; // Bear
+      case 'neutral':
+      default:
+        return '⚖️'; // Balance
     }
   }
 };
