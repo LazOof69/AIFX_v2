@@ -11,6 +11,7 @@ const UserPreferences = require('./UserPreferences');
 const UserTradingHistory = require('./UserTradingHistory');
 const PositionMonitoring = require('./PositionMonitoring');
 const UserDiscordSettings = require('./UserDiscordSettings');
+const UserLineSettings = require('./UserLineSettings');
 
 // ML Continuous Learning models
 const ModelTrainingLog = require('./ModelTrainingLog');
@@ -148,6 +149,30 @@ UserDiscordSettings.belongsTo(UserPreferences, {
   as: 'preferences',
 });
 
+/**
+ * LINE Bot Relationships
+ * Backend APIs for LINE Bot (follows same pattern as Discord)
+ */
+
+// User -> UserLineSettings (One-to-One)
+User.hasOne(UserLineSettings, {
+  foreignKey: 'userId',
+  as: 'lineSettings',
+  onDelete: 'CASCADE',
+});
+
+UserLineSettings.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user',
+});
+
+// UserLineSettings -> UserPreferences (One-to-One, through User)
+UserLineSettings.belongsTo(UserPreferences, {
+  foreignKey: 'userId',
+  targetKey: 'userId',
+  as: 'preferences',
+});
+
 // User -> SignalNotification (One-to-Many)
 // User.hasMany(SignalNotification, {
 //   foreignKey: 'userId',
@@ -206,6 +231,7 @@ module.exports = {
   UserTradingHistory,
   PositionMonitoring,
   UserDiscordSettings,
+  UserLineSettings,
   // ML Continuous Learning models
   ModelTrainingLog,
   ModelVersion,
