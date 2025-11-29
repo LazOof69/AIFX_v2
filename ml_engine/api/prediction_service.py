@@ -9,6 +9,7 @@ Integrates sentiment analysis for enhanced predictions.
 Author: AI-assisted
 Created: 2025-10-16
 Updated: 2025-11-27 - Added sentiment analysis integration
+Updated: 2025-11-30 - Sentiment now AFFECTS signal decision (timeframe-weighted)
 """
 
 import numpy as np
@@ -23,9 +24,21 @@ from services.sentiment_analyzer import SentimentAnalyzer
 logger = logging.getLogger(__name__)
 
 
+# Sentiment weight by timeframe (longer timeframe = higher sentiment weight)
+# Technical weight = 1.0 - sentiment_weight
+SENTIMENT_WEIGHTS = {
+    '15min': 0.05,   # 5% sentiment, 95% technical (short-term: technical dominates)
+    '1h':    0.15,   # 15% sentiment, 85% technical
+    '4h':    0.30,   # 30% sentiment, 70% technical
+    '1d':    0.45,   # 45% sentiment, 55% technical
+    '1w':    0.60,   # 60% sentiment, 40% technical (long-term: sentiment dominates)
+}
+
+
 class PredictionService:
     """
     Unified prediction service for reversal detection
+    Integrates ML technical analysis with sentiment analysis using timeframe-weighted fusion.
     """
 
     def __init__(self, model_manager: ModelManager):
@@ -37,7 +50,89 @@ class PredictionService:
         """
         self.model_manager = model_manager
         self.sentiment_analyzer = SentimentAnalyzer()
-        logger.info("Prediction Service initialized with sentiment analysis")
+        logger.info("Prediction Service initialized with sentiment-weighted decision making")
+
+    def _get_sentiment_weight(self, timeframe: str) -> float:
+        """
+        Get sentiment weight based on timeframe.
+        Longer timeframes give more weight to sentiment/fundamentals.
+
+        Args:
+            timeframe: Trading timeframe (15min, 1h, 4h, 1d, 1w)
+
+        Returns:
+            float: Sentiment weight (0.0-1.0)
+        """
+        return SENTIMENT_WEIGHTS.get(timeframe, 0.15)  # Default to 1h weight
+
+    def _combine_signals(self, ml_signal: str, ml_confidence: float,
+                         sentiment_score: float, sentiment_weight: float) -> Tuple[str, float]:
+        """
+        Combine ML signal with sentiment analysis using weighted fusion.
+
+        Logic:
+        1. Convert signals to numeric: long=1.0, standby=0.5, short=0.0
+        2. Sentiment: bullish (>0.6)=1.0, neutral (0.4-0.6)=0.5, bearish (<0.4)=0.0
+        3. Combined score = (technical * tech_weight) + (sentiment * sent_weight)
+        4. Final signal based on combined score thresholds
+
+        Special cases:
+        - If ML and sentiment strongly disagree → reduce confidence
+        - If ML and sentiment agree → boost confidence
+
+        Args:
+            ml_signal: ML model signal ('long', 'short', 'standby')
+            ml_confidence: ML model confidence (0.0-1.0)
+            sentiment_score: Sentiment score (0.0-1.0, where 0=bearish, 1=bullish)
+            sentiment_weight: Weight for sentiment (0.0-1.0)
+
+        Returns:
+            Tuple[str, float]: (final_signal, adjusted_confidence)
+        """
+        tech_weight = 1.0 - sentiment_weight
+
+        # Convert ML signal to numeric score
+        ml_score_map = {'long': 1.0, 'standby': 0.5, 'short': 0.0}
+        ml_score = ml_score_map.get(ml_signal, 0.5)
+
+        # Calculate combined score
+        combined_score = (ml_score * tech_weight) + (sentiment_score * sentiment_weight)
+
+        # Determine final signal based on combined score
+        if combined_score > 0.6:
+            final_signal = 'long'
+        elif combined_score < 0.4:
+            final_signal = 'short'
+        else:
+            final_signal = 'standby'
+
+        # Adjust confidence based on agreement/disagreement
+        # Check if ML and sentiment agree on direction
+        ml_direction = 1 if ml_signal == 'long' else (-1 if ml_signal == 'short' else 0)
+        sent_direction = 1 if sentiment_score > 0.6 else (-1 if sentiment_score < 0.4 else 0)
+
+        if ml_direction != 0 and sent_direction != 0:
+            if ml_direction == sent_direction:
+                # Agreement: boost confidence by up to 10%
+                agreement_boost = 0.10 * sentiment_weight  # More boost for longer timeframes
+                adjusted_confidence = min(1.0, ml_confidence + agreement_boost)
+                logger.info(f"Signal agreement (ML={ml_signal}, Sentiment={sent_direction}): confidence boosted +{agreement_boost:.2f}")
+            else:
+                # Disagreement: reduce confidence
+                disagreement_penalty = 0.15 * sentiment_weight  # More penalty for longer timeframes
+                adjusted_confidence = max(0.1, ml_confidence - disagreement_penalty)
+                logger.info(f"Signal disagreement (ML={ml_signal}, Sentiment={sent_direction}): confidence reduced -{disagreement_penalty:.2f}")
+        else:
+            # One or both are neutral
+            adjusted_confidence = ml_confidence
+
+        logger.info(
+            f"Signal fusion: ML={ml_signal}({ml_score:.2f}) + Sentiment={sentiment_score:.2f} "
+            f"[weights: tech={tech_weight:.2f}, sent={sentiment_weight:.2f}] "
+            f"→ combined={combined_score:.2f} → {final_signal} (conf={adjusted_confidence:.2f})"
+        )
+
+        return final_signal, adjusted_confidence
 
     def predict_reversal(self, market_data: np.ndarray, pair: str = None, timeframe: str = "1h", version: str = None) -> Dict:
         """
@@ -126,30 +221,50 @@ class PredictionService:
 
                     # Analyze sentiment if pair is provided
                     sentiment_result = None
+                    sentiment_score = 0.5  # neutral default
                     if pair:
                         try:
                             sentiment_result = self.sentiment_analyzer.analyze_sentiment(pair, timeframe)
-                            logger.info(f"Sentiment for {pair}: {sentiment_result['signal']} (score: {sentiment_result['sentiment_score']:.2f})")
+                            sentiment_score = sentiment_result['sentiment_score']
+                            logger.info(f"Sentiment for {pair}: {sentiment_result['signal']} (score: {sentiment_score:.2f})")
                         except Exception as e:
                             logger.warning(f"Sentiment analysis failed: {e}")
 
+                    # Get sentiment weight based on timeframe
+                    sentiment_weight = self._get_sentiment_weight(timeframe)
+
+                    # Store original ML signal for logging
+                    ml_signal = signal
+                    ml_confidence = confidence
+
+                    # Combine ML signal with sentiment (sentiment weight increases with timeframe)
+                    final_signal, adjusted_confidence = self._combine_signals(
+                        ml_signal=signal,
+                        ml_confidence=confidence,
+                        sentiment_score=sentiment_score,
+                        sentiment_weight=sentiment_weight
+                    )
+
                     result = {
-                        'signal': signal,
-                        'confidence': float(confidence),
+                        'signal': final_signal,  # Now affected by sentiment!
+                        'confidence': float(adjusted_confidence),
                         'stage1_prob': float(max(long_prob, short_prob)),  # Reversal probability
-                        'stage2_prob': float(long_prob if signal == 'long' else short_prob) if signal != 'standby' else None,
-                        'sentiment_score': sentiment_result['sentiment_score'] if sentiment_result else 0.5,
+                        'stage2_prob': float(long_prob if final_signal == 'long' else short_prob) if final_signal != 'standby' else None,
+                        'sentiment_score': sentiment_score,
                         'sentiment_signal': sentiment_result['signal'] if sentiment_result else 'neutral',
+                        'sentiment_weight': sentiment_weight,  # Show the weight used
+                        'ml_signal': ml_signal,  # Original ML signal before fusion
+                        'ml_confidence': float(ml_confidence),  # Original ML confidence
                         'factors': {
                             'technical': float(max(long_prob, short_prob)),
-                            'sentiment': sentiment_result['sentiment_score'] if sentiment_result else 0.5,
-                            'pattern': float(long_prob if signal == 'long' else short_prob) if signal != 'standby' else 0.5
+                            'sentiment': sentiment_score,
+                            'pattern': float(long_prob if final_signal == 'long' else short_prob) if final_signal != 'standby' else 0.5
                         },
                         'model_version': model_version.version,
                         'timestamp': datetime.utcnow().isoformat() + 'Z'
                     }
 
-                    logger.info(f"3-class model result: {result['signal']} (confidence: {result['confidence']:.4f})")
+                    logger.info(f"3-class model result: ML={ml_signal} → Final={result['signal']} (conf: {ml_confidence:.4f} → {adjusted_confidence:.4f})")
                     return result
 
             # Original two-stage logic for other models
@@ -172,22 +287,27 @@ class PredictionService:
             if has_reversal_prob < model_version.threshold:
                 # No reversal detected - add sentiment analysis
                 sentiment_result = None
+                sentiment_score = 0.5
                 if pair:
                     try:
                         sentiment_result = self.sentiment_analyzer.analyze_sentiment(pair, timeframe)
+                        sentiment_score = sentiment_result['sentiment_score']
                     except Exception as e:
                         logger.warning(f"Sentiment analysis failed: {e}")
+
+                sentiment_weight = self._get_sentiment_weight(timeframe)
 
                 result = {
                     'signal': 'standby',  # No reversal detected, standby/wait
                     'confidence': float(1.0 - has_reversal_prob),
                     'stage1_prob': float(has_reversal_prob),
                     'stage2_prob': None,
-                    'sentiment_score': sentiment_result['sentiment_score'] if sentiment_result else 0.5,
+                    'sentiment_score': sentiment_score,
                     'sentiment_signal': sentiment_result['signal'] if sentiment_result else 'neutral',
+                    'sentiment_weight': sentiment_weight,
                     'factors': {
                         'technical': float(has_reversal_prob),
-                        'sentiment': sentiment_result['sentiment_score'] if sentiment_result else 0.5,
+                        'sentiment': sentiment_score,
                         'pattern': 0.5
                     },
                     'model_version': model_version.version,
@@ -230,31 +350,45 @@ class PredictionService:
             direction_prob = float(stage2_pred[0][0])
 
             # 0 = long, 1 = short
-            signal = 'short' if direction_prob > 0.5 else 'long'
+            ml_signal = 'short' if direction_prob > 0.5 else 'long'
             direction_confidence = direction_prob if direction_prob > 0.5 else (1.0 - direction_prob)
 
             # Overall confidence: weighted average (Stage 1: 40%, Stage 2: 60%)
-            overall_confidence = (has_reversal_prob * 0.4) + (direction_confidence * 0.6)
+            ml_confidence = (has_reversal_prob * 0.4) + (direction_confidence * 0.6)
 
             # Analyze sentiment if pair is provided
             sentiment_result = None
+            sentiment_score = 0.5
             if pair:
                 try:
                     sentiment_result = self.sentiment_analyzer.analyze_sentiment(pair, timeframe)
-                    logger.info(f"Sentiment for {pair}: {sentiment_result['signal']} (score: {sentiment_result['sentiment_score']:.2f})")
+                    sentiment_score = sentiment_result['sentiment_score']
+                    logger.info(f"Sentiment for {pair}: {sentiment_result['signal']} (score: {sentiment_score:.2f})")
                 except Exception as e:
                     logger.warning(f"Sentiment analysis failed: {e}")
 
+            # Get sentiment weight based on timeframe and combine signals
+            sentiment_weight = self._get_sentiment_weight(timeframe)
+            final_signal, adjusted_confidence = self._combine_signals(
+                ml_signal=ml_signal,
+                ml_confidence=ml_confidence,
+                sentiment_score=sentiment_score,
+                sentiment_weight=sentiment_weight
+            )
+
             result = {
-                'signal': signal,
-                'confidence': float(overall_confidence),
+                'signal': final_signal,  # Now affected by sentiment!
+                'confidence': float(adjusted_confidence),
                 'stage1_prob': float(has_reversal_prob),
                 'stage2_prob': float(direction_prob),
-                'sentiment_score': sentiment_result['sentiment_score'] if sentiment_result else 0.5,
+                'sentiment_score': sentiment_score,
                 'sentiment_signal': sentiment_result['signal'] if sentiment_result else 'neutral',
+                'sentiment_weight': sentiment_weight,
+                'ml_signal': ml_signal,  # Original ML signal
+                'ml_confidence': float(ml_confidence),  # Original ML confidence
                 'factors': {
                     'technical': float(has_reversal_prob),
-                    'sentiment': sentiment_result['sentiment_score'] if sentiment_result else 0.5,
+                    'sentiment': sentiment_score,
                     'pattern': float(direction_prob)
                 },
                 'model_version': model_version.version,
@@ -262,9 +396,9 @@ class PredictionService:
             }
 
             logger.info(
-                f"Reversal detected: {result['signal']} "
-                f"(confidence: {result['confidence']:.2f}, "
-                f"stage2_prob: {direction_prob:.4f})"
+                f"Two-stage model result: ML={ml_signal} → Final={final_signal} "
+                f"(conf: {ml_confidence:.2f} → {adjusted_confidence:.2f}, "
+                f"sentiment_weight={sentiment_weight:.0%})"
             )
 
             return result
