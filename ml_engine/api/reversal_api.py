@@ -291,6 +291,9 @@ async def predict_reversal(request: ReversalPredictionRequest):
             "stage2_prob": prediction['stage2_prob'],
             "sentiment_score": prediction.get('sentiment_score', 0.5),
             "sentiment_signal": prediction.get('sentiment_signal', 'neutral'),
+            "sentiment_weight": prediction.get('sentiment_weight', 0.15),
+            "ml_signal": prediction.get('ml_signal', prediction['signal']),  # Original ML signal
+            "ml_confidence": prediction.get('ml_confidence', prediction['confidence']),  # Original ML confidence
             "model_version": prediction['model_version'],
             "factors": prediction.get('factors', {
                 "technical": prediction.get('stage1_prob', 0.0),
@@ -303,7 +306,7 @@ async def predict_reversal(request: ReversalPredictionRequest):
         if 'warning' in prediction:
             response_data['warning'] = prediction['warning']
 
-        logger.info(f"Prediction result: {prediction['signal']} (confidence: {prediction['confidence']:.2f})")
+        logger.info(f"Prediction result: ML={prediction.get('ml_signal', prediction['signal'])} → Final={prediction['signal']} (sentiment_weight={prediction.get('sentiment_weight', 0.15):.0%})")
 
         return ReversalPredictionResponse(
             success=True,
@@ -486,6 +489,9 @@ async def predict_reversal_raw(request: ReversalPredictionRequest):
             "stage2_prob": prediction['stage2_prob'],
             "sentiment_score": prediction.get('sentiment_score', 0.5),
             "sentiment_signal": prediction.get('sentiment_signal', 'neutral'),
+            "sentiment_weight": prediction.get('sentiment_weight', 0.15),
+            "ml_signal": prediction.get('ml_signal', prediction['signal']),  # Original ML signal
+            "ml_confidence": prediction.get('ml_confidence', prediction['confidence']),  # Original ML confidence
             "model_version": prediction['model_version'],
             "factors": prediction.get('factors', {
                 "technical": prediction.get('stage1_prob', 0.0),
@@ -498,7 +504,7 @@ async def predict_reversal_raw(request: ReversalPredictionRequest):
         if 'warning' in prediction:
             response_data['warning'] = prediction['warning']
 
-        logger.info(f"✅ Prediction result: {prediction['signal']} (confidence: {prediction['confidence']:.2f})")
+        logger.info(f"✅ Prediction result: ML={prediction.get('ml_signal', prediction['signal'])} → Final={prediction['signal']} (sentiment_weight={prediction.get('sentiment_weight', 0.15):.0%})")
 
         return ReversalPredictionResponse(
             success=True,
