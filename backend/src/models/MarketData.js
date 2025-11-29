@@ -78,9 +78,9 @@ const MarketData = sequelize.define('MarketData', {
   },
   // Data source information
   source: {
-    type: DataTypes.ENUM('alpha_vantage', 'twelve_data', 'manual', 'calculated'),
+    type: DataTypes.ENUM('alpha_vantage', 'twelve_data', 'twelvedata', 'manual', 'calculated', 'yfinance'),
     allowNull: false,
-    defaultValue: 'alpha_vantage',
+    defaultValue: 'twelvedata',
   },
   // Cache metadata
   cacheExpiresAt: {

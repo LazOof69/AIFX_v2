@@ -198,10 +198,8 @@ class WeeklyTrainer:
                     logger.info(f"   Fetching signals: {pair} {timeframe}")
                     result = self.api_client.get_historical_signals(
                         pair=pair,
-                        timeframe=timeframe,
                         start_date=start_date.isoformat(),
                         end_date=end_date.isoformat(),
-                        outcome=['win', 'loss'],
                         limit=10000
                     )
 

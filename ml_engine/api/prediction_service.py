@@ -115,7 +115,7 @@ class PredictionService:
 
                     # Determine signal based on highest probability
                     if hold_prob > long_prob and hold_prob > short_prob:
-                        signal = 'hold'
+                        signal = 'standby'
                         confidence = hold_prob
                     elif long_prob > short_prob:
                         signal = 'long'
@@ -137,13 +137,13 @@ class PredictionService:
                         'signal': signal,
                         'confidence': float(confidence),
                         'stage1_prob': float(max(long_prob, short_prob)),  # Reversal probability
-                        'stage2_prob': float(long_prob if signal == 'long' else short_prob) if signal != 'hold' else None,
+                        'stage2_prob': float(long_prob if signal == 'long' else short_prob) if signal != 'standby' else None,
                         'sentiment_score': sentiment_result['sentiment_score'] if sentiment_result else 0.5,
                         'sentiment_signal': sentiment_result['signal'] if sentiment_result else 'neutral',
                         'factors': {
                             'technical': float(max(long_prob, short_prob)),
                             'sentiment': sentiment_result['sentiment_score'] if sentiment_result else 0.5,
-                            'pattern': float(long_prob if signal == 'long' else short_prob) if signal != 'hold' else 0.5
+                            'pattern': float(long_prob if signal == 'long' else short_prob) if signal != 'standby' else 0.5
                         },
                         'model_version': model_version.version,
                         'timestamp': datetime.utcnow().isoformat() + 'Z'
@@ -179,7 +179,7 @@ class PredictionService:
                         logger.warning(f"Sentiment analysis failed: {e}")
 
                 result = {
-                    'signal': 'hold',  # Changed from 'none' to 'hold' for consistency with backend
+                    'signal': 'standby',  # No reversal detected, standby/wait
                     'confidence': float(1.0 - has_reversal_prob),
                     'stage1_prob': float(has_reversal_prob),
                     'stage2_prob': None,
@@ -198,7 +198,7 @@ class PredictionService:
 
             # Stage 2: Determine direction
             if not model_version.stage2_model:
-                logger.warning("Stage 2 model not available, returning hold signal")
+                logger.warning("Stage 2 model not available, returning standby signal")
 
                 # Add sentiment analysis
                 sentiment_result = None
@@ -209,7 +209,7 @@ class PredictionService:
                         logger.warning(f"Sentiment analysis failed: {e}")
 
                 result = {
-                    'signal': 'hold',
+                    'signal': 'standby',
                     'confidence': float(has_reversal_prob),
                     'stage1_prob': float(has_reversal_prob),
                     'stage2_prob': None,
@@ -310,7 +310,7 @@ class PredictionService:
                 if has_reversal_prob < model_version.threshold:
                     # No reversal
                     results.append({
-                        'signal': 'hold',
+                        'signal': 'standby',
                         'confidence': float(1.0 - has_reversal_prob),
                         'stage1_prob': float(has_reversal_prob),
                         'stage2_prob': None,
@@ -352,11 +352,11 @@ class PredictionService:
                         }
                         stage2_idx += 1
             else:
-                # No Stage 2 model available, mark as hold
+                # No Stage 2 model available, mark as standby
                 for i, result in enumerate(results):
                     if result.get('_needs_stage2'):
                         results[i] = {
-                            'signal': 'hold',
+                            'signal': 'standby',
                             'confidence': result['stage1_prob'],
                             'stage1_prob': result['stage1_prob'],
                             'stage2_prob': None,

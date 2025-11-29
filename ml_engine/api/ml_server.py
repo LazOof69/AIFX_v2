@@ -28,7 +28,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models.price_predictor import PricePredictor
 from data_processing.preprocessor import DataPreprocessor, load_data_from_dict
-from data_processing.yfinance_fetcher import YFinanceFetcher
+from data_processing.twelvedata_fetcher import TwelveDataFetcher
 
 # Configure logging
 logging.basicConfig(
@@ -382,7 +382,7 @@ async def get_market_data(
     limit: int = 100
 ):
     """
-    Fetch historical market data using yfinance
+    Fetch historical market data using Twelve Data API
 
     - **pair**: Currency pair (e.g., EUR/USD)
     - **timeframe**: Timeframe (1min, 5min, 15min, 30min, 1h, 4h, 1d, 1w, 1M)
@@ -391,7 +391,7 @@ async def get_market_data(
     try:
         logger.info(f"Market data request: {pair}, {timeframe}, limit={limit}")
 
-        result = YFinanceFetcher.fetch_historical_data(pair, timeframe, limit)
+        result = TwelveDataFetcher.fetch_historical_data(pair, timeframe, limit)
 
         if not result['success']:
             raise HTTPException(
@@ -399,17 +399,15 @@ async def get_market_data(
                 detail=result.get('error', 'Failed to fetch market data')
             )
 
-        return JSONResponse(
-            content={
-                "success": True,
-                "data": {
-                    "timeSeries": result['timeSeries'],
-                    "metadata": result['metadata']
-                },
-                "error": None,
-                "timestamp": get_current_timestamp()
-            }
-        )
+        return {
+            "success": True,
+            "data": {
+                "timeSeries": result['timeSeries'],
+                "metadata": result['metadata']
+            },
+            "error": None,
+            "timestamp": get_current_timestamp()
+        }
 
     except HTTPException:
         raise
@@ -442,23 +440,29 @@ async def root():
 # Exception handlers
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc):
-    return {
-        "success": False,
-        "data": None,
-        "error": exc.detail,
-        "timestamp": get_current_timestamp()
-    }
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "data": None,
+            "error": exc.detail,
+            "timestamp": get_current_timestamp()
+        }
+    )
 
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request, exc):
     logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
-    return {
-        "success": False,
-        "data": None,
-        "error": "Internal server error",
-        "timestamp": get_current_timestamp()
-    }
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "data": None,
+            "error": "Internal server error",
+            "timestamp": get_current_timestamp()
+        }
+    )
 
 
 # Import reversal prediction modules

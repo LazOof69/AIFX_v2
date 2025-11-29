@@ -323,20 +323,48 @@ const validateApiKey = (req, res, next) => {
  */
 const authenticateFlexible = async (req, res, next) => {
   try {
-    // Check for API key first (for internal services like Discord bot)
-    const apiKey = req.headers['x-api-key'];
+    // Check for API key first (for internal services like Discord bot, LINE bot)
+    // Support both x-api-key header and Authorization: Bearer <API_KEY>
+    const apiKeyFromHeader = req.headers['x-api-key'];
+    const authHeader = req.headers.authorization;
+
+    let apiKey = apiKeyFromHeader;
+    let isApiKeyAuth = false;
+
+    // Check if Authorization header contains API key (not JWT)
+    if (!apiKey && authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      // API keys are 64 chars hex, JWTs are much longer and contain dots
+      if (token && token.length === 64 && !token.includes('.')) {
+        apiKey = token;
+        isApiKeyAuth = true;
+      }
+    }
 
     if (apiKey) {
-      // Validate API key
-      if (apiKey === process.env.API_KEY) {
+      // Validate API key (support both API_KEY and LINE_BOT_API_KEY)
+      const validApiKeys = [
+        process.env.API_KEY,
+        process.env.LINE_BOT_API_KEY
+      ].filter(Boolean);
+
+      if (validApiKeys.includes(apiKey)) {
+        // Determine service name
+        let serviceName = 'Unknown Service';
+        if (apiKey === process.env.LINE_BOT_API_KEY) {
+          serviceName = 'LINE Bot';
+        } else if (apiKey === process.env.API_KEY) {
+          serviceName = 'Discord Bot';
+        }
+
         // Set service user context
         req.user = {
-          id: 'service-discord-bot',
-          username: 'Discord Bot',
+          id: `service-${serviceName.toLowerCase().replace(' ', '-')}`,
+          username: serviceName,
           isService: true,
           preferences: {} // Empty preferences for service account
         };
-        req.userId = 'service-discord-bot';
+        req.userId = req.user.id;
         return next();
       } else {
         return next(new AppError('Invalid API key', 401, 'INVALID_API_KEY'));
@@ -344,7 +372,6 @@ const authenticateFlexible = async (req, res, next) => {
     }
 
     // Otherwise, fall back to JWT authentication
-    const authHeader = req.headers.authorization;
 
     if (!authHeader) {
       return next(new AppError('Authorization header or API key required', 401, 'AUTH_REQUIRED'));

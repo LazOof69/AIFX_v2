@@ -1,7 +1,7 @@
 /**
  * Forex Data Service
- * Simplified service using ONLY yfinance via ML Engine API
- * REMOVED: Alpha Vantage, Twelve Data (as per user request)
+ * Uses Twelve Data API via ML Engine
+ * All market data fetched through ML Engine's /market-data endpoint
  */
 
 const axios = require('axios');
@@ -35,7 +35,7 @@ const initializeCache = async () => {
 
 /**
  * Fetch real-time price for a currency pair
- * Uses yfinance via ML Engine API
+ * Uses Twelve Data API via ML Engine
  *
  * @param {string} pair - Currency pair (e.g., 'EUR/USD')
  * @returns {Promise<object>} Price data
@@ -50,21 +50,21 @@ const getRealtimePrice = async (pair) => {
       console.log(`✅ Cache hit for ${pair} realtime price`);
       return {
         success: true,
-        data: JSON.parse(cachedData),
+        data: cachedData,  // Already parsed by cache.get()
         cached: true,
         timestamp: new Date().toISOString(),
       };
     }
 
-    console.log(`🔍 Fetching realtime price for ${pair} from ML Engine (yfinance)...`);
+    console.log(`🔍 Fetching realtime price for ${pair} from ML Engine (Twelve Data)...`);
 
-    // Fetch from ML Engine (which uses yfinance)
+    // Fetch from ML Engine (which uses Twelve Data)
     const response = await axios.get(`${ML_API_URL}/market-data/${pair.replace('/', '')}`, {
       params: {
         timeframe: '1min',
         limit: 1,
       },
-      timeout: 10000,
+      timeout: 30000, // Increased to 30s for Twelve Data API
     });
 
     if (!response.data.success || !response.data.data.timeSeries.length) {
@@ -79,7 +79,7 @@ const getRealtimePrice = async (pair) => {
       high: latestCandle.high,
       low: latestCandle.low,
       timestamp: latestCandle.timestamp,
-      source: 'yfinance',
+      source: 'twelvedata',
     };
 
     // Cache for 30 seconds (realtime data should be fresh)
@@ -107,8 +107,9 @@ const getRealtimePrice = async (pair) => {
 };
 
 /**
- * Fetch historical market data
- * Uses yfinance via ML Engine API
+ * Fetch historical market data (HYBRID MODE)
+ * Strategy: Database (99 candles) + API (1 latest candle)
+ * Saves API quota while maintaining real-time data
  *
  * @param {string} pair - Currency pair
  * @param {string} timeframe - Timeframe (1min, 5min, 15min, 30min, 1h, 4h, 1d, 1w, 1M)
@@ -120,7 +121,7 @@ const getHistoricalData = async (pair, timeframe = '1hour', limit = 100) => {
     // Normalize timeframe format
     const normalizedTimeframe = normalizeTimeframe(timeframe);
 
-    // Check cache first
+    // Check cache first (short TTL for hybrid mode)
     const cacheKey = cache.generateForexKey('historical', pair, normalizedTimeframe, limit.toString());
     const cachedData = await cache.get(cacheKey);
 
@@ -128,26 +129,82 @@ const getHistoricalData = async (pair, timeframe = '1hour', limit = 100) => {
       console.log(`✅ Cache hit for ${pair} ${normalizedTimeframe} historical data`);
       return {
         success: true,
-        data: cachedData, // cache.get() already parses JSON
+        data: cachedData,
         cached: true,
         timestamp: new Date().toISOString(),
       };
     }
 
-    console.log(`🔍 Fetching ${pair} ${normalizedTimeframe} historical data from ML Engine (yfinance)...`);
+    console.log(`🔄 HYBRID MODE: Fetching ${pair} ${normalizedTimeframe} data...`);
 
-    // Fetch from ML Engine (which uses yfinance)
-    const response = await axios.get(`${ML_API_URL}/market-data/${pair.replace('/', '')}`, {
-      params: {
-        timeframe: normalizedTimeframe,
-        limit: limit,
-      },
-      timeout: 15000,
-    });
+    // HYBRID MODE: Database (99) + API (1)
+    // Step 1: Get 99 candles from database
+    const dbCandles = await MarketData.findLatest(pair, normalizedTimeframe, limit - 1);
+    console.log(`📂 Database: Retrieved ${dbCandles.length} candles for ${pair} ${normalizedTimeframe}`);
 
-    if (!response.data.success) {
+    // Step 2: Get 1 latest candle from API
+    let latestCandle = null;
+    let apiCallMade = false;
+
+    try {
+      const apiResponse = await axios.get(`${ML_API_URL}/market-data/${pair.replace('/', '')}`, {
+        params: {
+          timeframe: normalizedTimeframe,
+          limit: 1,  // Only fetch the latest candle
+        },
+        timeout: 30000,
+      });
+
+      if (apiResponse.data.success && apiResponse.data.timeSeries && apiResponse.data.timeSeries.length > 0) {
+        latestCandle = apiResponse.data.timeSeries[0];
+        apiCallMade = true;
+        console.log(`🌐 API: Retrieved latest candle for ${pair} ${normalizedTimeframe}`);
+      }
+    } catch (apiError) {
+      console.warn(`⚠️ API call failed, using database only: ${apiError.message}`);
+    }
+
+    // Step 3: Combine data
+    let timeSeries = [];
+
+    if (latestCandle && apiCallMade) {
+      // Add latest candle from API first (most recent)
+      timeSeries.push(latestCandle);
+
+      // Add database candles (skip if latest timestamp matches API)
+      const latestApiTimestamp = new Date(latestCandle.timestamp).getTime();
+      dbCandles.forEach(candle => {
+        const candleTimestamp = new Date(candle.timestamp).getTime();
+        if (candleTimestamp < latestApiTimestamp) {
+          timeSeries.push({
+            timestamp: candle.timestamp,
+            open: parseFloat(candle.open),
+            high: parseFloat(candle.high),
+            low: parseFloat(candle.low),
+            close: parseFloat(candle.close),
+            volume: parseFloat(candle.volume || 0)
+          });
+        }
+      });
+
+      console.log(`✅ HYBRID: Combined ${timeSeries.length} candles (1 API + ${dbCandles.length} DB)`);
+    } else {
+      // Fallback: Use only database candles
+      timeSeries = dbCandles.map(candle => ({
+        timestamp: candle.timestamp,
+        open: parseFloat(candle.open),
+        high: parseFloat(candle.high),
+        low: parseFloat(candle.low),
+        close: parseFloat(candle.close),
+        volume: parseFloat(candle.volume || 0)
+      }));
+      console.log(`📂 DATABASE ONLY: Using ${timeSeries.length} candles from database`);
+    }
+
+    // Ensure we have enough data
+    if (timeSeries.length === 0) {
       throw new AppError(
-        response.data.error || 'Failed to fetch historical data',
+        `No market data available for ${pair} ${normalizedTimeframe}`,
         404,
         'NO_DATA'
       );
@@ -156,14 +213,18 @@ const getHistoricalData = async (pair, timeframe = '1hour', limit = 100) => {
     const historicalData = {
       pair,
       timeframe: normalizedTimeframe,
-      timeSeries: response.data.data.timeSeries,
-      metadata: response.data.data.metadata,
-      source: 'yfinance',
+      timeSeries: timeSeries.slice(0, limit), // Limit to requested number
+      metadata: {
+        total: timeSeries.length,
+        source: apiCallMade ? 'hybrid' : 'database',
+        databaseCandles: dbCandles.length,
+        apiCandles: apiCallMade ? 1 : 0
+      },
+      source: apiCallMade ? 'hybrid' : 'database',
     };
 
-    // Cache based on timeframe (longer timeframes = longer cache)
-    const cacheTTL = getCacheTTL(normalizedTimeframe);
-    await cache.set(cacheKey, JSON.stringify(historicalData), cacheTTL);
+    // Cache for shorter time (30 seconds for hybrid mode)
+    await cache.set(cacheKey, JSON.stringify(historicalData), 30);
 
     return {
       success: true,

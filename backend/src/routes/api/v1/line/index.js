@@ -11,8 +11,10 @@ const router = express.Router();
 
 // Import sub-routes
 const usersRouter = require('./users');
+const subscriptionsRouter = require('./subscriptions');
 
 // Mount routes
 router.use('/users', usersRouter);
+router.use('/subscriptions', subscriptionsRouter);
 
 module.exports = router;

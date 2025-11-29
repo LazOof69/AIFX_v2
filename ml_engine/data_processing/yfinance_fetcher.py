@@ -4,7 +4,6 @@ Fetches forex data using yfinance for real-time market data
 Enhanced with rate limit handling and better error recovery
 """
 
-import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
@@ -14,8 +13,38 @@ import time
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Note: yfinance 0.2.66+ uses curl_cffi internally for better rate limit handling
-# No custom session needed - let yfinance handle it
+# Patch yfinance to use Chrome 120 before importing
+import os
+os.environ['CURL_CFFI_DEFAULT_BROWSER'] = 'chrome120'
+
+# Now import yfinance after setting environment
+import yfinance as yf
+
+# Monkey patch curl_cffi Session to force Chrome 119
+try:
+    from curl_cffi.requests import Session as CurlSession
+
+    # Save original __init__
+    _original_init = CurlSession.__init__
+
+    def _patched_init(self, *args, **kwargs):
+        """Disable browser impersonation to avoid compatibility issues"""
+        # Remove impersonate parameter entirely - use plain curl
+        if 'impersonate' in kwargs:
+            old_value = kwargs['impersonate']
+            del kwargs['impersonate']
+            logger.info(f"Removed impersonate parameter (was: {old_value})")
+        return _original_init(self, *args, **kwargs)
+
+    # Apply monkey patch to Session class
+    CurlSession.__init__ = _patched_init
+    logger.info("✅ Patched curl_cffi Session to disable browser impersonation")
+except Exception as e:
+    logger.warning(f"⚠️ Could not patch curl_cffi: {e}")
+
+# Rate limiting: minimum 2 seconds between requests to avoid Yahoo Finance throttling
+_last_request_time = 0
+_min_request_interval = 2.0
 
 
 class YFinanceFetcher:
@@ -40,13 +69,14 @@ class YFinanceFetcher:
     }
 
     # Timeframe mapping to yfinance intervals
+    # Supported intervals: 1m, 2m, 5m, 15m, 30m, 60m, 90m, 1h, 1d, 5d, 1wk, 1mo, 3mo
     TIMEFRAME_MAPPING = {
         '1min': '1m',
         '5min': '5m',
-        '15min': '15m',
+        '15min': '15m',  # Direct support in yfinance
         '30min': '30m',
-        '1h': '1h',
-        '4h': '1h',  # Will aggregate to 4h
+        '1h': '60m',     # Use 60m for better compatibility
+        '4h': '1h',      # Will aggregate to 4h
         '1d': '1d',
         '1w': '1wk',
         '1M': '1mo',
@@ -55,7 +85,18 @@ class YFinanceFetcher:
     @classmethod
     def get_ticker(cls, pair: str) -> str:
         """Convert currency pair to yfinance ticker"""
-        return cls.PAIR_MAPPING.get(pair, f"{pair.replace('/', '')}=X")
+        # Try exact match first
+        if pair in cls.PAIR_MAPPING:
+            return cls.PAIR_MAPPING[pair]
+
+        # If no slash, try adding one (e.g., EURUSD -> EUR/USD)
+        if '/' not in pair and len(pair) == 6:
+            formatted_pair = f"{pair[:3]}/{pair[3:]}"
+            if formatted_pair in cls.PAIR_MAPPING:
+                return cls.PAIR_MAPPING[formatted_pair]
+
+        # Fallback: use the pair as-is with =X suffix
+        return f"{pair.replace('/', '')}=X"
 
     @classmethod
     def get_interval(cls, timeframe: str) -> str:
@@ -96,7 +137,19 @@ class YFinanceFetcher:
         Returns:
             Dict with timeSeries, metadata, and status
         """
+        global _last_request_time
+
         try:
+            # Rate limiting: ensure minimum interval between requests
+            current_time = time.time()
+            time_since_last = current_time - _last_request_time
+            if time_since_last < _min_request_interval:
+                sleep_time = _min_request_interval - time_since_last
+                logger.info(f"Rate limiting: sleeping for {sleep_time:.1f} seconds")
+                time.sleep(sleep_time)
+
+            _last_request_time = time.time()
+
             ticker = cls.get_ticker(pair)
             interval = cls.get_interval(timeframe)
             period_days = cls.get_period_days(timeframe, limit)
@@ -107,7 +160,7 @@ class YFinanceFetcher:
             end_date = datetime.now()
             start_date = end_date - timedelta(days=period_days)
 
-            # Let yfinance use its internal curl_cffi session for better rate limit handling
+            # Let yfinance use its internal curl_cffi session for browser impersonation
             ticker_obj = yf.Ticker(ticker)
 
             # Try up to 3 times with delays
@@ -211,7 +264,7 @@ class YFinanceFetcher:
         """Get current price for a currency pair"""
         try:
             ticker = cls.get_ticker(pair)
-            ticker_obj = yf.Ticker(ticker)  # Let yfinance use curl_cffi internally
+            ticker_obj = yf.Ticker(ticker)
 
             # Try to get fast info first
             try:

@@ -20,6 +20,7 @@ const ModelABTest = require('./ModelABTest');
 
 // Signal Change Notification models
 const UserSubscription = require('./UserSubscription');
+const UserLineSubscription = require('./UserLineSubscription');
 const SignalChangeHistory = require('./SignalChangeHistory');
 
 // Establish model relationships
@@ -238,5 +239,6 @@ module.exports = {
   ModelABTest,
   // Signal Change Notification models
   UserSubscription,
+  UserLineSubscription,
   SignalChangeHistory,
 };

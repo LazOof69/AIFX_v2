@@ -426,4 +426,203 @@ router.get(
   })
 );
 
+/**
+ * @route   POST /api/v1/market/collect
+ * @desc    Trigger market data collection (for cron jobs)
+ * @access  Internal (no auth required for localhost cron)
+ */
+router.post(
+  '/collect',
+  asyncHandler(async (req, res) => {
+    const collector = require('../services/marketDataCollectionService');
+
+    try {
+      console.log('[Market Data Collection] Triggered by cron job');
+      const results = await collector.fetchLatestData();
+
+      res.status(200).json({
+        success: true,
+        data: results,
+        error: null,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('[Market Data Collection] Error:', error);
+      res.status(500).json({
+        success: false,
+        data: null,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  })
+);
+
+/**
+ * @route   POST /api/v1/market/data
+ * @desc    Save market data to database (from ML Engine data collector)
+ * @access  Internal (ML Engine service)
+ * @body    { pair, timeframe, open, high, low, close, volume, timestamp, source }
+ */
+router.post(
+  '/data',
+  asyncHandler(async (req, res) => {
+    const MarketData = require('../models/MarketData');
+
+    try {
+      const { pair, timeframe, open, high, low, close, volume, timestamp, source } = req.body;
+
+      // Validate required fields
+      if (!pair || !timeframe || !open || !high || !low || !close || !timestamp) {
+        return res.status(400).json({
+          success: false,
+          data: null,
+          error: 'Missing required fields: pair, timeframe, open, high, low, close, timestamp',
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Check for duplicate (same pair + timeframe + timestamp)
+      const existing = await MarketData.findOne({
+        where: {
+          pair,
+          timeframe,
+          timestamp: new Date(timestamp)
+        }
+      });
+
+      if (existing) {
+        return res.status(409).json({
+          success: false,
+          data: null,
+          error: 'Duplicate entry: data for this timestamp already exists',
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Insert new market data
+      const marketData = await MarketData.create({
+        pair,
+        timeframe,
+        open: parseFloat(open),
+        high: parseFloat(high),
+        low: parseFloat(low),
+        close: parseFloat(close),
+        volume: parseFloat(volume || 0),
+        timestamp: new Date(timestamp),
+        source: source || 'unknown'
+      });
+
+      res.status(201).json({
+        success: true,
+        data: {
+          id: marketData.id,
+          pair: marketData.pair,
+          timeframe: marketData.timeframe,
+          timestamp: marketData.timestamp,
+          source: marketData.source
+        },
+        error: null,
+        timestamp: new Date().toISOString(),
+      });
+
+    } catch (error) {
+      console.error('[Market Data Save] Error:', error);
+      res.status(500).json({
+        success: false,
+        data: null,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  })
+);
+
+/**
+ * Internal service authentication middleware
+ * Skips rate limiting for internal service calls
+ */
+const skipRateLimitForInternalServices = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    // Mark as internal service request to skip rate limiting
+    req.isInternalService = true;
+  }
+  next();
+};
+
+/**
+ * @route   POST /api/v1/market/data/bulk
+ * @desc    Bulk save market data to database (from ML Engine data collector)
+ * @access  Internal (ML Engine service)
+ * @body    { pair, timeframe, candles: [{open, high, low, close, volume, timestamp}], source }
+ */
+router.post(
+  '/data/bulk',
+  skipRateLimitForInternalServices,  // Skip rate limit for internal services
+  asyncHandler(async (req, res) => {
+    const MarketData = require('../models/MarketData');
+    const { sequelize } = require('../config/database');
+
+    try {
+      const { pair, timeframe, candles, source } = req.body;
+
+      // Validate required fields
+      if (!pair || !timeframe || !candles || !Array.isArray(candles)) {
+        return res.status(400).json({
+          success: false,
+          data: null,
+          error: 'Missing required fields: pair, timeframe, candles (array)',
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      console.log(`[Bulk Insert] Received ${candles.length} candles for ${pair} ${timeframe}`);
+
+      // Prepare bulk insert data
+      const records = candles.map(candle => ({
+        pair,
+        timeframe,
+        open: parseFloat(candle.open),
+        high: parseFloat(candle.high),
+        low: parseFloat(candle.low),
+        close: parseFloat(candle.close),
+        volume: parseFloat(candle.volume || 0),
+        timestamp: new Date(candle.timestamp),
+        source: source || 'twelve_data'  // Use existing enum value
+      }));
+
+      // Bulk insert with ignoreDuplicates
+      const result = await MarketData.bulkCreate(records, {
+        ignoreDuplicates: true, // Skip duplicates instead of erroring
+        validate: true
+      });
+
+      console.log(`[Bulk Insert] Successfully inserted ${result.length} candles`);
+
+      res.status(201).json({
+        success: true,
+        data: {
+          pair,
+          timeframe,
+          totalReceived: candles.length,
+          inserted: result.length,
+          duplicatesSkipped: candles.length - result.length
+        },
+        error: null,
+        timestamp: new Date().toISOString(),
+      });
+
+    } catch (error) {
+      console.error('[Bulk Market Data Save] Error:', error);
+      res.status(500).json({
+        success: false,
+        data: null,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  })
+);
+
 module.exports = router;

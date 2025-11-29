@@ -23,7 +23,8 @@ class BackendClient {
     };
 
     if (this.apiKey) {
-      headers['x-api-key'] = this.apiKey;
+      headers['Authorization'] = `Bearer ${this.apiKey}`;
+      headers['X-Service-Name'] = 'line-bot';
     }
 
     return headers;
@@ -173,18 +174,20 @@ class BackendClient {
    * @param {string} lineUserId - LINE user ID
    * @param {string} pair - Currency pair
    * @param {string} timeframe - Timeframe
+   * @param {string} lineDisplayName - LINE display name (optional)
    * @returns {Promise<Object>} Subscription result
    */
-  async subscribe(lineUserId, pair, timeframe = '1h') {
+  async subscribe(lineUserId, pair, timeframe = '1h', lineDisplayName = null) {
     try {
       logger.info(`Subscribing user ${lineUserId} to ${pair} (${timeframe})`);
 
       const response = await axios.post(
-        `${this.baseURL}/api/v1/notifications/subscribe`,
+        `${this.baseURL}/api/v1/line/subscriptions`,
         {
           lineUserId,
           pair,
-          timeframe
+          timeframe,
+          lineDisplayName
         },
         {
           headers: this._getHeaders(),
@@ -216,7 +219,7 @@ class BackendClient {
       logger.info(`Unsubscribing user ${lineUserId} from ${pair} (${timeframe})`);
 
       const response = await axios.post(
-        `${this.baseURL}/api/v1/notifications/unsubscribe`,
+        `${this.baseURL}/api/v1/line/subscriptions/unsubscribe`,
         {
           lineUserId,
           pair,
@@ -236,6 +239,35 @@ class BackendClient {
       }
     } catch (error) {
       logger.error(`Error unsubscribing user ${lineUserId} from ${pair}:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Get user's subscriptions
+   * @param {string} lineUserId - LINE user ID
+   * @returns {Promise<Array>} List of subscriptions
+   */
+  async getSubscriptions(lineUserId) {
+    try {
+      logger.info(`Fetching subscriptions for user: ${lineUserId}`);
+
+      const response = await axios.get(
+        `${this.baseURL}/api/v1/line/subscriptions/${lineUserId}`,
+        {
+          headers: this._getHeaders(),
+          timeout: this.timeout
+        }
+      );
+
+      if (response.data.success) {
+        logger.info(`Subscriptions fetched for user ${lineUserId}`);
+        return response.data.data?.subscriptions || [];
+      } else {
+        throw new Error(response.data.error || 'Failed to get subscriptions');
+      }
+    } catch (error) {
+      logger.error(`Error fetching subscriptions for ${lineUserId}:`, error.message);
       throw error;
     }
   }

@@ -15,6 +15,7 @@ const AppError = require('../../utils/AppError');
  */
 const API_KEYS = {
   DISCORD_BOT: process.env.DISCORD_BOT_API_KEY || 'dev_discord_bot_key_replace_in_production',
+  LINE_BOT: process.env.LINE_BOT_API_KEY || 'dev_line_bot_key_replace_in_production',
   ML_ENGINE: process.env.ML_ENGINE_API_KEY || 'dev_ml_engine_key_replace_in_production',
 };
 
@@ -23,6 +24,7 @@ const API_KEYS = {
  */
 const SERVICE_NAMES = {
   [API_KEYS.DISCORD_BOT]: 'discord-bot',
+  [API_KEYS.LINE_BOT]: 'line-bot',
   [API_KEYS.ML_ENGINE]: 'ml-engine',
 };
 
@@ -31,6 +33,7 @@ const SERVICE_NAMES = {
  */
 const RATE_LIMITS = {
   'discord-bot': 500,
+  'line-bot': 500,
   'ml-engine': 1000,
 };
 
