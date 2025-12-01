@@ -52,6 +52,7 @@ const corsOptions = {
       'http://10.0.0.199',
       'http://168.138.182.181',
       'http://168.138.182.181:5173',
+      'http://144.24.41.178:5174', // Admin Dashboard
     ];
 
     // Allow requests with no origin (mobile apps, etc.)
@@ -132,6 +133,7 @@ app.use('/api/v1/discord', require('./routes/api/v1/discord')); // Discord Bot A
 app.use('/api/v1/line', require('./routes/api/v1/line')); // LINE Bot APIs
 app.use('/api/v1/ml', require('./routes/api/v1/ml')); // ML Engine APIs (Phase 3)
 app.use('/api/v1/subscriptions', require('./routes/api/v1/subscriptions')); // Signal Change Subscriptions (MVP)
+app.use('/api/v1/admin', require('./routes/admin')); // Admin Dashboard APIs (獨立)
 
 // TODO: Add additional route files when created
 // app.use('/api/v1/preferences', require('./routes/preferences'));
