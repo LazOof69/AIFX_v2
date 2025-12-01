@@ -9,6 +9,7 @@ const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const dotenv = require('dotenv');
+const path = require('path');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 
@@ -31,7 +32,8 @@ const io = new Server(server, {
 // Trust proxy for accurate IP addresses behind load balancers
 app.set('trust proxy', 1);
 
-// Security middleware
+// Security middleware (disable CSP for admin dashboard)
+app.use('/admin', helmet({ contentSecurityPolicy: false }));
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -165,6 +167,13 @@ io.on('connection', (socket) => {
 
 // Make io accessible to routes
 app.set('io', io);
+
+// Admin Dashboard static files (served at /admin)
+const adminDistPath = path.join(__dirname, '../../admin_dashboard/dist');
+app.use('/admin', express.static(adminDistPath));
+app.get('/admin/*', (req, res) => {
+  res.sendFile(path.join(adminDistPath, 'index.html'));
+});
 
 // 404 handler for undefined routes
 app.all('*', (req, res, next) => {
