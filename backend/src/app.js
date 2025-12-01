@@ -168,6 +168,10 @@ io.on('connection', (socket) => {
 // Make io accessible to routes
 app.set('io', io);
 
+// Initialize Admin WebSocket
+const { initAdminSocket } = require('./websocket/adminSocket');
+initAdminSocket(io);
+
 // Admin Dashboard static files (served at /admin)
 const adminDistPath = path.join(__dirname, '../../admin_dashboard/dist');
 app.use('/admin', express.static(adminDistPath));
