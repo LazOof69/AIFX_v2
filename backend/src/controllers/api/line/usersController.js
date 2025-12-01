@@ -147,9 +147,17 @@ const createOrUpdateUser = async (req, res, next) => {
       const userEmail = email || `line_${lineUserId}@aifx.placeholder`;
       const defaultPassword = `line_${lineUserId}_${Date.now()}`;
 
+      // Generate a safe username (only alphanumeric and underscores)
+      let safeUsername = username;
+      if (!safeUsername) {
+        // Use lineUserId to create a unique, safe username
+        const shortId = lineUserId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 12);
+        safeUsername = `line_${shortId}`;
+      }
+
       user = await User.create({
         email: userEmail,
-        username: username || lineDisplayName || `line_user_${lineUserId.substring(0, 8)}`,
+        username: safeUsername,
         password: defaultPassword,
         isActive: true,
         isVerified: true,

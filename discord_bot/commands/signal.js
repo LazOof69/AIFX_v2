@@ -7,6 +7,41 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const axios = require('axios');
 const logger = require('../utils/logger');
 
+/**
+ * Auto-register Discord user to backend database
+ * @param {Object} interaction - Discord interaction
+ */
+async function ensureUserRegistered(interaction) {
+  try {
+    const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:3000';
+    const apiKey = process.env.DISCORD_BOT_API_KEY;
+
+    const headers = {
+      'X-Service-Name': 'discord-bot'
+    };
+    if (apiKey) {
+      // Use Bearer token format as expected by apiKeyAuth middleware
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
+
+    // Call backend API to create or update user
+    await axios.post(
+      `${backendUrl}/api/v1/discord/users`,
+      {
+        discordId: interaction.user.id,
+        discordUsername: interaction.user.username,
+        username: interaction.user.username,
+      },
+      { headers, timeout: 5000 }
+    );
+
+    logger.info(`User ${interaction.user.username} (${interaction.user.id}) registered/updated`);
+  } catch (error) {
+    // Don't block the signal command if registration fails
+    logger.warn(`Failed to register user ${interaction.user.username}: ${error.message}`);
+  }
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('signal')
@@ -81,6 +116,9 @@ module.exports = {
       }
 
       logger.info('✅ Interaction 状态正常，开始 defer...');
+
+      // Auto-register user (non-blocking)
+      ensureUserRegistered(interaction);
 
       // CRITICAL: Defer immediately - backend API takes ~1 second
       // Must acknowledge within 3 seconds or Discord times out

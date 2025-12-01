@@ -13,9 +13,10 @@ const { MarketData } = require('../models');
 const logger = require('../utils/logger');
 
 // Configuration for data collection
+// Updated to match scheduledSignalService requirements
 const COLLECTION_CONFIG = {
-  pairs: ['EUR/USD', 'USD/JPY'],
-  timeframes: ['15min', '1h'],
+  pairs: ['EUR/USD', 'GBP/USD', 'USD/JPY'],
+  timeframes: ['15min', '1h', '4h', '1d'],
   batchSize: 100, // Number of historical candles to fetch initially
   updateSize: 10   // Number of recent candles to fetch on updates
 };

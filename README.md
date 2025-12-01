@@ -1236,6 +1236,29 @@ pm2 startup
 
 ---
 
+---
+
+## 📝 更新日誌
+
+### 2025-12-02
+
+#### 修復
+- **Discord Bot API Key 認證**: 修正 `authenticateFlexible` 中間件，支援 `DISCORD_BOT_API_KEY` 認證
+- **LINE Bot 用戶註冊**: 修正參數名稱 (`displayName` → `lineDisplayName`) 及 username 驗證邏輯
+- **API Key 衝突**: 為 Discord Bot 和 LINE Bot 生成獨立的 API Key，避免服務識別衝突
+- **Webhook 轉發**: 在 Backend 添加 webhook proxy，將 LINE webhook 請求轉發至 LINE Bot 服務
+
+#### 新增
+- **Admin Dashboard v2**: 新增簡化版 Python 管理後台 (純 HTTP 請求)
+- **訊號篩選器**: Admin Dashboard 訊號頁面新增貨幣對、週期、方向篩選功能
+- **排程訊號服務**: 新增 `scheduledSignalService.js` 支援自動訊號生成
+
+#### 改進
+- **用戶管理**: 後台現可顯示 Discord 和 LINE 用戶
+- **服務架構**: 強化微服務間的 API 認證機制
+
+---
+
 <div align="center">
 
 **AIFX v2** - *Empowering Traders with AI*

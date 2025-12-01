@@ -86,7 +86,7 @@ class BackendClient {
         `${this.baseURL}/api/v1/line/users`,
         {
           lineUserId,
-          displayName
+          lineDisplayName: displayName
         },
         {
           headers: this._getHeaders(),

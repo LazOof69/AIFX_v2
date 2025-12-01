@@ -10,6 +10,7 @@ const { initializeRedis, closeConnection } = require('./utils/cache');
 const monitoringService = require('./services/monitoringService');
 const marketDataCollector = require('./services/marketDataCollector');
 const signalMonitoringService = require('./services/signalMonitoringService');
+const scheduledSignalService = require('./services/scheduledSignalService');
 
 // Handle uncaught exceptions
 process.on('uncaughtException', handleUncaughtException);
@@ -75,6 +76,11 @@ const startServer = async () => {
       console.log('🔄 Starting signal monitoring service...');
       signalMonitoringService.start();
       console.log('✅ Signal monitoring service started (checks every 15 minutes)');
+
+      // Start scheduled signal service (tracks 3 pairs x 4 timeframes, saves on state change)
+      console.log('🔄 Starting scheduled signal service...');
+      scheduledSignalService.start();
+      console.log('✅ Scheduled signal service started (tracks EUR/USD, GBP/USD, USD/JPY on 15min, 1h, 4h, 1d)');
     });
 
   } catch (error) {
@@ -97,6 +103,9 @@ const gracefulShutdown = async () => {
 
   console.log('🛑 Stopping signal monitoring service...');
   await signalMonitoringService.stop();
+
+  console.log('🛑 Stopping scheduled signal service...');
+  await scheduledSignalService.stop();
 
   // Close Redis connection
   console.log('🛑 Closing Redis connection...');

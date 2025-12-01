@@ -342,19 +342,22 @@ const authenticateFlexible = async (req, res, next) => {
     }
 
     if (apiKey) {
-      // Validate API key (support both API_KEY and LINE_BOT_API_KEY)
+      // Validate API key (support DISCORD_BOT_API_KEY, LINE_BOT_API_KEY, and legacy API_KEY)
       const validApiKeys = [
-        process.env.API_KEY,
-        process.env.LINE_BOT_API_KEY
+        process.env.DISCORD_BOT_API_KEY,
+        process.env.LINE_BOT_API_KEY,
+        process.env.API_KEY  // Legacy fallback
       ].filter(Boolean);
 
       if (validApiKeys.includes(apiKey)) {
         // Determine service name
         let serviceName = 'Unknown Service';
-        if (apiKey === process.env.LINE_BOT_API_KEY) {
+        if (apiKey === process.env.DISCORD_BOT_API_KEY) {
+          serviceName = 'Discord Bot';
+        } else if (apiKey === process.env.LINE_BOT_API_KEY) {
           serviceName = 'LINE Bot';
         } else if (apiKey === process.env.API_KEY) {
-          serviceName = 'Discord Bot';
+          serviceName = 'Legacy Service';
         }
 
         // Set service user context

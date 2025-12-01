@@ -48,7 +48,7 @@ class AIFXAdmin:
 
         # 伺服器
         ttk.Label(frame, text="伺服器網址:").pack(anchor='w')
-        self.url_var = tk.StringVar(value="https://heating-things-dsl-placing.trycloudflare.com")
+        self.url_var = tk.StringVar(value="https://instrumental-recipe-deployment-app.trycloudflare.com")
         ttk.Entry(frame, textvariable=self.url_var, width=50).pack(pady=(5, 15))
 
         # 帳號
@@ -323,7 +323,76 @@ class AIFXAdmin:
     def render_signals(self, data):
         self.clear_content()
 
-        ttk.Label(self.content, text="訊號管理", style='Title.TLabel').pack(anchor='w', pady=(0, 20))
+        ttk.Label(self.content, text="訊號管理", style='Title.TLabel').pack(anchor='w', pady=(0, 15))
+
+        # 篩選器
+        filter_frame = ttk.LabelFrame(self.content, text="篩選條件", padding=10)
+        filter_frame.pack(fill='x', pady=(0, 15))
+
+        # 貨幣對篩選
+        ttk.Label(filter_frame, text="貨幣對:").grid(row=0, column=0, padx=5, pady=5, sticky='e')
+        self.pair_filter = ttk.Combobox(filter_frame, values=['全部', 'EUR/USD', 'GBP/USD', 'USD/JPY'], width=12, state='readonly')
+        self.pair_filter.set('全部')
+        self.pair_filter.grid(row=0, column=1, padx=5, pady=5)
+
+        # 時間週期篩選
+        ttk.Label(filter_frame, text="週期:").grid(row=0, column=2, padx=5, pady=5, sticky='e')
+        self.tf_filter = ttk.Combobox(filter_frame, values=['全部', '15min', '1h', '4h', '1d'], width=10, state='readonly')
+        self.tf_filter.set('全部')
+        self.tf_filter.grid(row=0, column=3, padx=5, pady=5)
+
+        # 方向篩選
+        ttk.Label(filter_frame, text="方向:").grid(row=0, column=4, padx=5, pady=5, sticky='e')
+        self.dir_filter = ttk.Combobox(filter_frame, values=['全部', 'buy', 'sell', 'hold'], width=10, state='readonly')
+        self.dir_filter.set('全部')
+        self.dir_filter.grid(row=0, column=5, padx=5, pady=5)
+
+        # 篩選按鈕
+        ttk.Button(filter_frame, text="🔍 篩選", command=self.apply_signal_filter).grid(row=0, column=6, padx=15, pady=5)
+        ttk.Button(filter_frame, text="🔄 重置", command=self.reset_signal_filter).grid(row=0, column=7, padx=5, pady=5)
+
+        # 顯示資料
+        self.display_signals(data)
+
+    def apply_signal_filter(self):
+        """套用篩選條件"""
+        params = {'limit': 100}
+
+        pair = self.pair_filter.get()
+        if pair and pair != '全部':
+            params['pair'] = pair
+
+        tf = self.tf_filter.get()
+        if tf and tf != '全部':
+            params['timeframe'] = tf
+
+        direction = self.dir_filter.get()
+        if direction and direction != '全部':
+            params['direction'] = direction
+
+        def load():
+            data = self.api('GET', '/admin/signals', params=params)
+            self.root.after(0, lambda: self.display_signals(data))
+
+        threading.Thread(target=load, daemon=True).start()
+
+    def reset_signal_filter(self):
+        """重置篩選"""
+        self.pair_filter.set('全部')
+        self.tf_filter.set('全部')
+        self.dir_filter.set('全部')
+        self.apply_signal_filter()
+
+    def display_signals(self, data):
+        """顯示訊號表格"""
+        # 清除舊的表格 (保留篩選器)
+        for widget in self.content.winfo_children():
+            if isinstance(widget, ttk.LabelFrame):
+                continue
+            if hasattr(widget, 'winfo_name') and 'label' in str(type(widget)).lower():
+                if widget.cget('text') == '訊號管理':
+                    continue
+            widget.destroy()
 
         if not data.get('success'):
             ttk.Label(self.content, text=f"錯誤: {data.get('error')}", style='Error.TLabel').pack()
@@ -332,26 +401,98 @@ class AIFXAdmin:
         result = data.get('data') or {}
         signals = result.get('signals') or []
 
-        ttk.Label(self.content, text=f"共 {result.get('total', 0)} 個訊號").pack(anchor='w', pady=(0, 10))
+        # 統計摘要
+        summary_frame = ttk.Frame(self.content)
+        summary_frame.pack(fill='x', pady=(0, 10))
 
+        total = result.get('total', 0)
+        buy_count = sum(1 for s in signals if s.get('direction') == 'buy')
+        sell_count = sum(1 for s in signals if s.get('direction') == 'sell')
+        hold_count = sum(1 for s in signals if s.get('direction') not in ['buy', 'sell'])
+
+        ttk.Label(summary_frame, text=f"共 {total} 個訊號  |  ").pack(side='left')
+        ttk.Label(summary_frame, text=f"🟢 買入: {buy_count}  ", foreground='green').pack(side='left')
+        ttk.Label(summary_frame, text=f"🔴 賣出: {sell_count}  ", foreground='red').pack(side='left')
+        ttk.Label(summary_frame, text=f"⚪ 觀望: {hold_count}", foreground='gray').pack(side='left')
+
+        # 表格
         tree_frame = ttk.Frame(self.content)
         tree_frame.pack(fill='both', expand=True)
 
-        cols = ('id', 'pair', 'dir', 'conf', 'entry', 'sl', 'tp', 'time')
+        cols = ('pair', 'tf', 'dir', 'conf', 'strength', 'market', 'entry', 'sl', 'tp', 'time')
         tree = ttk.Treeview(tree_frame, columns=cols, show='headings', height=15)
 
-        for col, text, w in [('id', 'ID', 50), ('pair', '貨幣對', 80), ('dir', '方向', 60), ('conf', '信心度', 70),
-                              ('entry', '入場價', 80), ('sl', '止損', 80), ('tp', '止盈', 80), ('time', '時間', 130)]:
+        headers = [
+            ('pair', '貨幣對', 75),
+            ('tf', '週期', 55),
+            ('dir', '方向', 70),
+            ('conf', '信心度', 60),
+            ('strength', '強度', 70),
+            ('market', '市場', 60),
+            ('entry', '入場價', 85),
+            ('sl', '止損', 85),
+            ('tp', '止盈', 85),
+            ('time', '建立時間', 125)
+        ]
+
+        for col, text, w in headers:
             tree.heading(col, text=text)
-            tree.column(col, width=w)
+            tree.column(col, width=w, anchor='center')
+
+        # 時間週期對照
+        tf_map = {'15min': '15分', '30min': '30分', '1h': '1時', '1hour': '1時', '4h': '4時', '1d': '日線', '1w': '週線'}
 
         for s in signals:
-            d = "🟢買" if s.get('direction') == 'buy' else "🔴賣"
+            # 方向顯示
+            direction = s.get('direction', '')
+            if direction == 'buy':
+                dir_text = "🟢 買入"
+            elif direction == 'sell':
+                dir_text = "🔴 賣出"
+            else:
+                dir_text = "⚪ 觀望"
+
+            # 信心度
             c = s.get('confidence', 0)
-            conf = f"{float(c)*100:.0f}%" if c else 'N/A'
+            conf = f"{float(c)*100:.0f}%" if c else '-'
+
+            # 時間週期
+            tf = s.get('timeframe', '')
+            tf_display = tf_map.get(tf, tf) if tf else '-'
+
+            # 訊號強度
+            strength = s.get('signalStrength', '')
+            strength_map = {'very_strong': '極強', 'strong': '強', 'moderate': '中等', 'weak': '弱'}
+            strength_text = strength_map.get(strength, strength) if strength else '-'
+
+            # 市場狀態
+            market = s.get('marketCondition', '')
+            market_map = {'trending': '趨勢', 'ranging': '震盪', 'volatile': '波動', 'calm': '平靜'}
+            market_text = market_map.get(market, market) if market else '-'
+
+            # 價格格式化
+            entry = s.get('entryPrice')
+            entry_text = f"{float(entry):.5f}" if entry else '-'
+            sl = s.get('stopLoss')
+            sl_text = f"{float(sl):.5f}" if sl else '-'
+            tp = s.get('takeProfit')
+            tp_text = f"{float(tp):.5f}" if tp else '-'
+
+            # 時間
             t = str(s.get('createdAt', ''))[:19].replace('T', ' ')
-            tree.insert('', 'end', values=(s.get('id'), s.get('pair'), d, conf,
-                        s.get('entryPrice', 'N/A'), s.get('stopLoss', 'N/A'), s.get('takeProfit', 'N/A'), t))
+
+            tree.insert('', 'end', values=(
+                s.get('pair', ''),
+                tf_display,
+                dir_text,
+                conf,
+                strength_text,
+                market_text,
+                entry_text,
+                sl_text,
+                tp_text,
+                t
+            ))
 
         scrollbar = ttk.Scrollbar(tree_frame, orient='vertical', command=tree.yview)
         tree.configure(yscrollcommand=scrollbar.set)

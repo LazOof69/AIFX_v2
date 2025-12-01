@@ -94,6 +94,45 @@ const limiter = rateLimit({
 
 app.use('/api/', limiter);
 
+// LINE Bot Webhook Proxy - Forward raw body to LINE Bot service
+const http = require('http');
+app.post('/webhook', (req, res) => {
+  console.log('[Webhook Proxy] Received webhook request');
+
+  let rawBody = [];
+  req.on('data', chunk => rawBody.push(chunk));
+  req.on('end', () => {
+    const body = Buffer.concat(rawBody);
+    console.log(`[Webhook Proxy] Forwarding ${body.length} bytes to LINE Bot`);
+
+    const options = {
+      hostname: 'localhost',
+      port: 3001,
+      path: '/webhook',
+      method: 'POST',
+      headers: {
+        ...req.headers,
+        'content-length': body.length,
+        'host': 'localhost:3001'
+      }
+    };
+
+    const proxyReq = http.request(options, (proxyRes) => {
+      console.log(`[Webhook Proxy] LINE Bot response: ${proxyRes.statusCode}`);
+      res.writeHead(proxyRes.statusCode, proxyRes.headers);
+      proxyRes.pipe(res);
+    });
+
+    proxyReq.on('error', (err) => {
+      console.error('[Webhook Proxy] Error:', err.message);
+      res.status(502).json({ error: 'LINE Bot service unavailable' });
+    });
+
+    proxyReq.write(body);
+    proxyReq.end();
+  });
+});
+
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -172,12 +211,8 @@ app.set('io', io);
 const { initAdminSocket } = require('./websocket/adminSocket');
 initAdminSocket(io);
 
-// Admin Dashboard static files (served at /admin)
-const adminDistPath = path.join(__dirname, '../../admin_dashboard/dist');
-app.use('/admin', express.static(adminDistPath));
-app.get('/admin/*', (req, res) => {
-  res.sendFile(path.join(adminDistPath, 'index.html'));
-});
+// Admin Dashboard is now served by separate Admin App (not web)
+// API endpoints are available at /api/v1/admin/*
 
 // 404 handler for undefined routes
 app.all('*', (req, res, next) => {

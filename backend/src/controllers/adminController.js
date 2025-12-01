@@ -86,13 +86,13 @@ const getSystemHealth = async (req, res, next) => {
 
     // Check Redis (if available)
     try {
-      const redis = require('../config/redis');
-      if (redis && redis.ping) {
-        await redis.ping();
-        health.services.redis = 'connected';
-      } else {
-        health.services.redis = 'not_configured';
-      }
+      const redis = require('redis');
+      const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+      const testClient = redis.createClient({ url: redisUrl });
+      await testClient.connect();
+      await testClient.ping();
+      await testClient.quit();
+      health.services.redis = 'connected';
     } catch (e) {
       health.services.redis = 'disconnected';
     }
@@ -133,9 +133,9 @@ const getStats = async (req, res, next) => {
     const [userStats] = await sequelize.query(`
       SELECT
         COUNT(*) as total,
-        COUNT(CASE WHEN "isActive" = true THEN 1 END) as active,
-        COUNT(CASE WHEN "createdAt" >= :today THEN 1 END) as new_today
-      FROM "Users"
+        COUNT(CASE WHEN is_active = true THEN 1 END) as active,
+        COUNT(CASE WHEN created_at >= :today THEN 1 END) as new_today
+      FROM users
     `, {
       replacements: { today },
       type: sequelize.QueryTypes.SELECT,
@@ -145,8 +145,8 @@ const getStats = async (req, res, next) => {
     const [signalStats] = await sequelize.query(`
       SELECT
         COUNT(*) as total,
-        COUNT(CASE WHEN "createdAt" >= :today THEN 1 END) as today
-      FROM "TradingSignals"
+        COUNT(CASE WHEN created_at >= :today THEN 1 END) as today
+      FROM trading_signals
     `, {
       replacements: { today },
       type: sequelize.QueryTypes.SELECT,
@@ -192,15 +192,15 @@ const getUsers = async (req, res, next) => {
     const replacements = { limit: parseInt(limit), offset: parseInt(offset) };
 
     if (search) {
-      whereClause = `WHERE "username" ILIKE :search OR "email" ILIKE :search`;
+      whereClause = `WHERE username ILIKE :search OR email ILIKE :search`;
       replacements.search = `%${search}%`;
     }
 
-    const [users] = await sequelize.query(`
-      SELECT "id", "username", "email", "isActive", "createdAt", "updatedAt"
-      FROM "Users"
+    const users = await sequelize.query(`
+      SELECT id, username, email, is_active as "isActive", created_at as "createdAt", updated_at as "updatedAt"
+      FROM users
       ${whereClause}
-      ORDER BY "createdAt" DESC
+      ORDER BY created_at DESC
       LIMIT :limit OFFSET :offset
     `, {
       replacements,
@@ -208,7 +208,7 @@ const getUsers = async (req, res, next) => {
     });
 
     const [[countResult]] = await sequelize.query(`
-      SELECT COUNT(*) as total FROM "Users" ${whereClause}
+      SELECT COUNT(*) as total FROM users ${whereClause}
     `, {
       replacements,
     });
@@ -239,8 +239,8 @@ const updateUser = async (req, res, next) => {
     const { isActive } = req.body;
 
     await sequelize.query(`
-      UPDATE "Users" SET "isActive" = :isActive, "updatedAt" = NOW()
-      WHERE "id" = :id
+      UPDATE users SET is_active = :isActive, updated_at = NOW()
+      WHERE id = :id
     `, {
       replacements: { id, isActive },
     });
@@ -259,31 +259,48 @@ const updateUser = async (req, res, next) => {
 /**
  * Get Signals List
  * GET /api/v1/admin/signals
+ * Query params: page, limit, pair, direction, timeframe
  */
 const getSignals = async (req, res, next) => {
   try {
-    const { page = 1, limit = 20, pair, direction } = req.query;
+    const { page = 1, limit = 20, pair, direction, timeframe } = req.query;
     const offset = (page - 1) * limit;
 
     const conditions = [];
     const replacements = { limit: parseInt(limit), offset: parseInt(offset) };
 
     if (pair) {
-      conditions.push(`"pair" = :pair`);
+      conditions.push(`pair = :pair`);
       replacements.pair = pair;
     }
     if (direction) {
-      conditions.push(`"direction" = :direction`);
+      conditions.push(`action = :direction`);
       replacements.direction = direction;
+    }
+    if (timeframe) {
+      conditions.push(`timeframe = :timeframe`);
+      replacements.timeframe = timeframe;
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const signals = await sequelize.query(`
-      SELECT "id", "pair", "direction", "confidence", "entryPrice", "stopLoss", "takeProfit", "status", "createdAt"
-      FROM "TradingSignals"
+      SELECT
+        id,
+        pair,
+        action as direction,
+        confidence,
+        entry_price as "entryPrice",
+        stop_loss as "stopLoss",
+        take_profit as "takeProfit",
+        timeframe,
+        signal_strength as "signalStrength",
+        market_condition as "marketCondition",
+        status,
+        created_at as "createdAt"
+      FROM trading_signals
       ${whereClause}
-      ORDER BY "createdAt" DESC
+      ORDER BY created_at DESC
       LIMIT :limit OFFSET :offset
     `, {
       replacements,
@@ -291,7 +308,7 @@ const getSignals = async (req, res, next) => {
     });
 
     const [[countResult]] = await sequelize.query(`
-      SELECT COUNT(*) as total FROM "TradingSignals" ${whereClause}
+      SELECT COUNT(*) as total FROM trading_signals ${whereClause}
     `, {
       replacements,
     });

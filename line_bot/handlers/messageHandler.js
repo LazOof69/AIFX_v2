@@ -9,6 +9,28 @@ const logger = require('../utils/logger');
 
 class MessageHandler {
   /**
+   * Auto-register LINE user to backend database (non-blocking)
+   * @param {Object} event - LINE webhook event
+   * @param {Object} client - LINE client
+   */
+  async ensureUserRegistered(event, client) {
+    const userId = event.source.userId;
+
+    try {
+      // Get user profile from LINE
+      const profile = await client.getProfile(userId);
+      const displayName = profile.displayName;
+
+      // Register user in backend
+      await backendClient.getOrCreateUser(userId, displayName);
+      logger.info(`User ${displayName} (${userId}) auto-registered`);
+    } catch (error) {
+      // Don't block the message handler if registration fails
+      logger.warn(`Failed to auto-register user ${userId}: ${error.message}`);
+    }
+  }
+
+  /**
    * Handle text message
    * @param {Object} event - LINE webhook event
    * @param {Object} client - LINE client
@@ -18,6 +40,9 @@ class MessageHandler {
     const text = event.message.text.trim();
 
     logger.info(`Received message from ${userId}: ${text}`);
+
+    // Auto-register user (non-blocking)
+    this.ensureUserRegistered(event, client);
 
     try {
       // Handle help command
