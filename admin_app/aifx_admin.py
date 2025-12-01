@@ -210,15 +210,21 @@ class AIFXAdminApp:
 
         loading_label.destroy()
 
+        # 檢查 API 錯誤
+        if not health.get('success') or not stats.get('success'):
+            error_msg = health.get('error') or stats.get('error') or '無法取得資料'
+            ttk.Label(self.content_frame, text=f"錯誤: {error_msg}", style='Error.TLabel').pack(pady=20)
+            return
+
         # 統計卡片框架
         stats_frame = ttk.Frame(self.content_frame)
         stats_frame.pack(fill='x', pady=10)
 
         # 統計數據
-        stats_data = stats.get('data', {})
-        users = stats_data.get('users', {})
-        signals = stats_data.get('signals', {})
-        models = stats_data.get('models', {})
+        stats_data = stats.get('data') or {}
+        users = stats_data.get('users') or {}
+        signals = stats_data.get('signals') or {}
+        models = stats_data.get('models') or {}
 
         cards = [
             ("總用戶數", users.get('total', 0), f"+{users.get('newToday', 0)} 今日"),
@@ -239,8 +245,8 @@ class AIFXAdminApp:
         # 系統狀態
         ttk.Label(self.content_frame, text="服務狀態", style='Header.TLabel').pack(anchor='w', pady=(20, 10))
 
-        health_data = health.get('data', {})
-        services = health_data.get('services', {})
+        health_data = health.get('data') or {}
+        services = health_data.get('services') or {}
 
         services_frame = ttk.Frame(self.content_frame)
         services_frame.pack(fill='x')
@@ -305,8 +311,8 @@ class AIFXAdminApp:
             ttk.Label(self.content_frame, text=f"錯誤: {result.get('error')}", style='Error.TLabel').pack()
             return
 
-        data = result.get('data', {})
-        users = data.get('users', [])
+        data = result.get('data') or {}
+        users = data.get('users') or []
         total = data.get('total', 0)
 
         ttk.Label(self.content_frame, text=f"共 {total} 位用戶").pack(anchor='w', pady=(0, 10))
@@ -393,8 +399,8 @@ class AIFXAdminApp:
             ttk.Label(self.content_frame, text=f"錯誤: {result.get('error')}", style='Error.TLabel').pack()
             return
 
-        data = result.get('data', {})
-        signals = data.get('signals', [])
+        data = result.get('data') or {}
+        signals = data.get('signals') or []
         total = data.get('total', 0)
 
         ttk.Label(self.content_frame, text=f"共 {total} 個訊號").pack(anchor='w', pady=(0, 10))
@@ -467,7 +473,7 @@ class AIFXAdminApp:
         # ML Engine 狀態
         ttk.Label(self.content_frame, text="ML Engine 狀態", style='Header.TLabel').pack(anchor='w', pady=(0, 10))
 
-        status_data = status_result.get('data', {})
+        status_data = status_result.get('data') or {}
         status = status_data.get('status', 'unknown')
         status_text = "✅ 運行中" if status == 'running' else "❌ 未連接"
 
@@ -483,8 +489,8 @@ class AIFXAdminApp:
         # 模型列表
         ttk.Label(self.content_frame, text="模型列表", style='Header.TLabel').pack(anchor='w', pady=(0, 10))
 
-        models_data = models_result.get('data', {})
-        models = models_data.get('models', [])
+        models_data = models_result.get('data') or {}
+        models = models_data.get('models') or []
 
         tree_frame = ttk.Frame(self.content_frame)
         tree_frame.pack(fill='both', expand=True)
