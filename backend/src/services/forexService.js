@@ -155,8 +155,8 @@ const getHistoricalData = async (pair, timeframe = '1hour', limit = 100) => {
         timeout: 30000,
       });
 
-      if (apiResponse.data.success && apiResponse.data.timeSeries && apiResponse.data.timeSeries.length > 0) {
-        latestCandle = apiResponse.data.timeSeries[0];
+      if (apiResponse.data.success && apiResponse.data.data && apiResponse.data.data.timeSeries && apiResponse.data.data.timeSeries.length > 0) {
+        latestCandle = apiResponse.data.data.timeSeries[0];
         apiCallMade = true;
         console.log(`🌐 API: Retrieved latest candle for ${pair} ${normalizedTimeframe}`);
       }

@@ -13,10 +13,13 @@ Created: 2025-11-27
 
 import os
 import requests
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 import logging
 from typing import Dict, List, Optional
 import time
+import re
+from html import unescape
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -197,9 +200,59 @@ class SentimentAnalyzer:
             logger.error(f"Sentiment analysis error for {pair}: {e}", exc_info=True)
             return self._neutral_sentiment(f"Error: {str(e)}")
 
+    def _fetch_google_news_rss(self, query: str, max_results: int = 20) -> List[Dict]:
+        """
+        Fetch news from Google News RSS feed (free, no API key required)
+
+        Args:
+            query: Search query
+            max_results: Maximum number of results
+
+        Returns:
+            List of articles with 'title' and 'description'
+        """
+        try:
+            # Google News RSS URL
+            encoded_query = requests.utils.quote(query)
+            rss_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en-US&gl=US&ceid=US:en"
+
+            response = requests.get(rss_url, timeout=10)
+
+            if response.status_code != 200:
+                logger.warning(f"Google News RSS error: {response.status_code}")
+                return []
+
+            # Parse RSS XML
+            root = ET.fromstring(response.content)
+
+            articles = []
+            for item in root.findall('.//item')[:max_results]:
+                title = item.find('title')
+                description = item.find('description')
+
+                title_text = title.text if title is not None else ''
+                desc_text = description.text if description is not None else ''
+
+                # Clean HTML from description
+                desc_text = re.sub(r'<[^>]+>', '', unescape(desc_text))
+
+                if title_text:
+                    articles.append({
+                        'title': title_text,
+                        'description': desc_text[:500]  # Limit description length
+                    })
+
+            logger.info(f"Google News RSS: Found {len(articles)} articles for '{query}'")
+            return articles
+
+        except Exception as e:
+            logger.warning(f"Google News RSS error: {e}")
+            return []
+
     def _analyze_news_sentiment(self, pair: str, timeframe: str) -> Dict:
         """
         Analyze news sentiment for currency pair
+        Uses NewsAPI as primary source, Google News RSS as fallback
 
         Returns:
             {"score": 0.0-1.0, "confidence": 0.0-1.0, "count": int}
@@ -235,37 +288,65 @@ class SentimentAnalyzer:
 
             articles = []
             query_used = None
+            news_source = None
 
-            # Try each query tier until we get results
-            for i, query in enumerate(queries, 1):
-                logger.debug(f"Trying news query tier {i}: {query}")
+            # Try NewsAPI first (if API key is available)
+            if self.news_api_key:
+                for i, query in enumerate(queries, 1):
+                    logger.debug(f"Trying NewsAPI query tier {i}: {query}")
 
-                response = requests.get(
-                    self.newsapi_url,
-                    params={
-                        'q': query,
-                        'from': from_date,
-                        'language': 'en',
-                        'sortBy': 'relevancy',
-                        'pageSize': 20,
-                        'apiKey': self.news_api_key
-                    },
-                    timeout=10
-                )
+                    try:
+                        response = requests.get(
+                            self.newsapi_url,
+                            params={
+                                'q': query,
+                                'from': from_date,
+                                'language': 'en',
+                                'sortBy': 'relevancy',
+                                'pageSize': 20,
+                                'apiKey': self.news_api_key
+                            },
+                            timeout=10
+                        )
 
-                if response.status_code != 200:
-                    logger.warning(f"NewsAPI error: {response.status_code}")
-                    continue
+                        if response.status_code == 429:
+                            logger.warning("NewsAPI rate limit hit, falling back to Google News RSS")
+                            break
+                        elif response.status_code != 200:
+                            logger.warning(f"NewsAPI error: {response.status_code}")
+                            continue
 
-                articles = response.json().get('articles', [])
+                        articles = response.json().get('articles', [])
 
-                if articles:
-                    query_used = f"Tier {i}"
-                    logger.info(f"Found {len(articles)} articles using query tier {i}")
-                    break
+                        if articles:
+                            query_used = f"NewsAPI Tier {i}"
+                            news_source = "NewsAPI"
+                            logger.info(f"Found {len(articles)} articles using NewsAPI tier {i}")
+                            break
+                    except Exception as e:
+                        logger.warning(f"NewsAPI request error: {e}")
+                        continue
+
+            # Fallback to Google News RSS if NewsAPI failed or returned no results
+            if not articles:
+                logger.info("Trying Google News RSS as fallback...")
+
+                # Simpler queries for Google News RSS
+                google_queries = [
+                    f"{currency_query} forex",
+                    f"{currency_query} exchange rate",
+                    f"{currency_query} currency"
+                ]
+
+                for query in google_queries:
+                    articles = self._fetch_google_news_rss(query, max_results=20)
+                    if articles:
+                        query_used = f"Google RSS: {query}"
+                        news_source = "Google News RSS"
+                        break
 
             if not articles:
-                logger.info(f"No news articles found for {pair} (tried all query tiers)")
+                logger.info(f"No news articles found for {pair} (tried all sources)")
                 return {"score": 0.5, "confidence": 0.0, "count": 0}
 
             # Analyze sentiment for each article
@@ -411,11 +492,51 @@ class SentimentAnalyzer:
                 timeout=10
             )
 
-            if response.status_code != 200:
+            articles = []
+            if response.status_code == 200:
+                articles = response.json().get('articles', [])
+            else:
                 logger.warning(f"NewsAPI error for government: {response.status_code}")
-                return {"score": 0.5, "confidence": 0.0, "count": 0}
 
-            articles = response.json().get('articles', [])
+            # Fallback to Google News RSS if NewsAPI failed or returned no results
+            if not articles:
+                logger.info("Trying Google News RSS for central bank news...")
+
+                # Build Google News queries for central banks
+                cb_names = {
+                    'EUR': 'ECB European Central Bank',
+                    'USD': 'Federal Reserve Fed FOMC',
+                    'JPY': 'Bank of Japan BOJ',
+                    'GBP': 'Bank of England BoE',
+                    'CHF': 'Swiss National Bank SNB',
+                    'CAD': 'Bank of Canada',
+                    'AUD': 'Reserve Bank Australia RBA',
+                    'NZD': 'Reserve Bank New Zealand RBNZ'
+                }
+
+                for curr in currencies:
+                    if curr in cb_names:
+                        # Try different queries
+                        google_queries = [
+                            f"{cb_names[curr]} interest rate",
+                            f"{cb_names[curr]} monetary policy",
+                            f"{cb_names[curr]} inflation"
+                        ]
+
+                        for gq in google_queries:
+                            new_articles = self._fetch_google_news_rss(gq, max_results=10)
+                            if new_articles:
+                                # Convert to NewsAPI format
+                                for a in new_articles:
+                                    articles.append({
+                                        'title': a.get('title', ''),
+                                        'description': a.get('description', '')
+                                    })
+                                logger.info(f"Google News RSS: Found {len(new_articles)} CB articles for '{gq}'")
+                                break
+
+                        if articles:
+                            break
 
             if not articles:
                 logger.info(f"No government/CB articles found for {pair}")

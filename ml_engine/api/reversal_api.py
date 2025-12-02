@@ -377,6 +377,8 @@ async def predict_reversal_raw(request: ReversalPredictionRequest):
 
         # Sort by timestamp if available
         if 'timestamp' in df.columns and df['timestamp'].notna().all():
+            # Convert timestamp to datetime and remove timezone to avoid tz-naive vs tz-aware comparison errors
+            df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True).dt.tz_localize(None)
             df = df.sort_values('timestamp')
 
         logger.info(f"DataFrame created with {len(df)} rows")

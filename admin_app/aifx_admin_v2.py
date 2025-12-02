@@ -9,6 +9,8 @@ from tkinter import ttk, messagebox
 import requests
 import threading
 import time
+import json
+from datetime import datetime, timezone, timedelta
 
 class AIFXAdmin:
     def __init__(self, root):
@@ -148,6 +150,7 @@ class AIFXAdmin:
             ("👥 用戶", lambda: self.show_view('users')),
             ("📈 訊號", lambda: self.show_view('signals')),
             ("🤖 ML", lambda: self.show_view('ml')),
+            ("📰 情緒", lambda: self.show_view('sentiment')),
             ("🔄 刷新", self.refresh),
             ("🚪 登出", self.logout),
         ]
@@ -191,6 +194,8 @@ class AIFXAdmin:
                 models = self.api('GET', '/admin/ml/models')
                 status = self.api('GET', '/admin/ml/status')
                 self.root.after(0, lambda: self.render_ml(models, status))
+            elif view == 'sentiment':
+                self.root.after(0, self.render_sentiment)
 
         threading.Thread(target=load, daemon=True).start()
 
@@ -233,13 +238,20 @@ class AIFXAdmin:
         svc_frame = ttk.Frame(self.content)
         svc_frame.pack(fill='x')
 
-        for name, label in [('postgres', 'PostgreSQL'), ('redis', 'Redis'), ('mlEngine', 'ML Engine')]:
+        for name, label in [('postgres', 'PostgreSQL'), ('redis', 'Redis'), ('mlEngine', 'ML Engine'), ('sentiment', '情緒分析')]:
             s = services.get(name, 'unknown')
             icon = "✅" if s == 'connected' else "❌" if s == 'disconnected' else "⚠️"
             row = ttk.Frame(svc_frame)
             row.pack(fill='x', pady=2)
             ttk.Label(row, text=label, width=15).pack(side='left')
             ttk.Label(row, text=f"{icon} {s}").pack(side='left')
+
+            # 情緒分析額外資訊
+            if name == 'sentiment' and s == 'connected':
+                sinfo = hd.get('sentimentInfo', {})
+                if sinfo:
+                    ttk.Label(row, text=f"  (Model: {sinfo.get('model', 'N/A')}, Source: {sinfo.get('newsSource', 'N/A')})",
+                             foreground='gray').pack(side='left')
 
         # 系統資訊
         ttk.Label(self.content, text="系統資訊", style='Header.TLabel').pack(anchor='w', pady=(20, 10))
@@ -419,7 +431,7 @@ class AIFXAdmin:
         tree_frame = ttk.Frame(self.content)
         tree_frame.pack(fill='both', expand=True)
 
-        cols = ('pair', 'tf', 'dir', 'conf', 'strength', 'market', 'entry', 'sl', 'tp', 'time')
+        cols = ('pair', 'tf', 'dir', 'conf', 'sentiment', 'technical', 'strength', 'entry', 'time')
         tree = ttk.Treeview(tree_frame, columns=cols, show='headings', height=15)
 
         headers = [
@@ -427,12 +439,11 @@ class AIFXAdmin:
             ('tf', '週期', 55),
             ('dir', '方向', 70),
             ('conf', '信心度', 60),
-            ('strength', '強度', 70),
-            ('market', '市場', 60),
+            ('sentiment', '情緒', 55),
+            ('technical', '技術', 55),
+            ('strength', '強度', 60),
             ('entry', '入場價', 85),
-            ('sl', '止損', 85),
-            ('tp', '止盈', 85),
-            ('time', '建立時間', 125)
+            ('time', '建立時間 (GMT+8)', 140)
         ]
 
         for col, text, w in headers:
@@ -465,33 +476,43 @@ class AIFXAdmin:
             strength_map = {'very_strong': '極強', 'strong': '強', 'moderate': '中等', 'weak': '弱'}
             strength_text = strength_map.get(strength, strength) if strength else '-'
 
-            # 市場狀態
-            market = s.get('marketCondition', '')
-            market_map = {'trending': '趨勢', 'ranging': '震盪', 'volatile': '波動', 'calm': '平靜'}
-            market_text = market_map.get(market, market) if market else '-'
+            # 情緒和技術分數 (從 factors 取得)
+            factors = s.get('factors') or {}
+            if isinstance(factors, str):
+                try:
+                    factors = json.loads(factors)
+                except:
+                    factors = {}
+            sentiment_score = factors.get('sentiment', 0)
+            technical_score = factors.get('technical', 0)
+            sentiment_text = f"{float(sentiment_score)*100:.0f}%" if sentiment_score else '-'
+            technical_text = f"{float(technical_score)*100:.0f}%" if technical_score else '-'
 
             # 價格格式化
             entry = s.get('entryPrice')
             entry_text = f"{float(entry):.5f}" if entry else '-'
-            sl = s.get('stopLoss')
-            sl_text = f"{float(sl):.5f}" if sl else '-'
-            tp = s.get('takeProfit')
-            tp_text = f"{float(tp):.5f}" if tp else '-'
 
-            # 時間
-            t = str(s.get('createdAt', ''))[:19].replace('T', ' ')
+            # 時間 (轉換為 GMT+8)
+            ts = str(s.get('createdAt', ''))
+            try:
+                ts_clean = ts.replace('Z', '+00:00')
+                dt_utc = datetime.fromisoformat(ts_clean)
+                gmt8 = timezone(timedelta(hours=8))
+                dt_gmt8 = dt_utc.astimezone(gmt8)
+                time_text = dt_gmt8.strftime('%Y-%m-%d %H:%M')
+            except:
+                time_text = ts[:16].replace('T', ' ')
 
             tree.insert('', 'end', values=(
                 s.get('pair', ''),
                 tf_display,
                 dir_text,
                 conf,
+                sentiment_text,
+                technical_text,
                 strength_text,
-                market_text,
                 entry_text,
-                sl_text,
-                tp_text,
-                t
+                time_text
             ))
 
         scrollbar = ttk.Scrollbar(tree_frame, orient='vertical', command=tree.yview)
@@ -534,6 +555,195 @@ class AIFXAdmin:
             tree.insert('', 'end', values=(m.get('name'), m.get('type'), m.get('version'), acc, s))
 
         tree.pack(fill='both', expand=True)
+
+    def render_sentiment(self):
+        """顯示情緒分析測試介面"""
+        self.clear_content()
+
+        ttk.Label(self.content, text="情緒分析測試", style='Title.TLabel').pack(anchor='w', pady=(0, 20))
+
+        # 測試區域
+        test_frame = ttk.LabelFrame(self.content, text="測試情緒分析", padding=15)
+        test_frame.pack(fill='x', pady=(0, 15))
+
+        # 貨幣對選擇
+        row1 = ttk.Frame(test_frame)
+        row1.pack(fill='x', pady=5)
+
+        ttk.Label(row1, text="貨幣對:").pack(side='left', padx=(0, 10))
+        self.sentiment_pair = ttk.Combobox(row1, values=['EUR/USD', 'USD/JPY', 'GBP/USD', 'AUD/USD', 'USD/CHF', 'USD/CAD'], width=12, state='readonly')
+        self.sentiment_pair.set('EUR/USD')
+        self.sentiment_pair.pack(side='left', padx=(0, 20))
+
+        ttk.Label(row1, text="時間週期:").pack(side='left', padx=(0, 10))
+        self.sentiment_tf = ttk.Combobox(row1, values=['15min', '1h', '4h', '1d', '1w'], width=10, state='readonly')
+        self.sentiment_tf.set('1h')
+        self.sentiment_tf.pack(side='left', padx=(0, 20))
+
+        ttk.Button(row1, text="🔍 分析", command=self.do_sentiment_test).pack(side='left', padx=10)
+
+        # 結果區域
+        self.sentiment_result_frame = ttk.LabelFrame(self.content, text="分析結果", padding=15)
+        self.sentiment_result_frame.pack(fill='both', expand=True)
+
+        ttk.Label(self.sentiment_result_frame, text="選擇貨幣對並點擊「分析」按鈕", foreground='gray').pack(pady=30)
+
+        # 說明
+        info_frame = ttk.LabelFrame(self.content, text="情緒分析說明", padding=10)
+        info_frame.pack(fill='x', pady=(15, 0))
+
+        info_text = """
+• 新聞情緒 (News): 從 Google News RSS 獲取財經新聞，使用 FinBERT 模型分析
+• 央行情緒 (Central Bank): 分析各國央行政策相關新聞
+• 綜合情緒分數: 0.0 (極度看空) ~ 0.5 (中性) ~ 1.0 (極度看多)
+• 信心度: 表示分析結果的可信程度
+• 時間週期越長，情緒權重越高 (15min: 5%, 1h: 15%, 4h: 30%, 1d: 45%, 1w: 60%)
+• 快取時間: 1 小時
+        """
+        ttk.Label(info_frame, text=info_text.strip(), justify='left').pack(anchor='w')
+
+    def do_sentiment_test(self):
+        """執行情緒分析測試"""
+        pair = self.sentiment_pair.get().replace('/', '')
+        tf = self.sentiment_tf.get()
+
+        # 清除舊結果
+        for w in self.sentiment_result_frame.winfo_children():
+            w.destroy()
+
+        loading = ttk.Label(self.sentiment_result_frame, text="分析中... (可能需要 10-30 秒)")
+        loading.pack(pady=30)
+        self.root.update()
+
+        def analyze():
+            data = self.api('GET', f'/admin/sentiment/test/{pair}', params={'timeframe': tf})
+            self.root.after(0, lambda: self.display_sentiment_result(data))
+
+        threading.Thread(target=analyze, daemon=True).start()
+
+    def display_sentiment_result(self, data):
+        """顯示情緒分析結果"""
+        # 清除載入中
+        for w in self.sentiment_result_frame.winfo_children():
+            w.destroy()
+
+        if not data.get('success'):
+            ttk.Label(self.sentiment_result_frame, text=f"錯誤: {data.get('error', '未知錯誤')}", style='Error.TLabel').pack(pady=30)
+            return
+
+        result = data.get('data', {})
+        sentiment = result.get('sentiment', {})
+
+        if not sentiment:
+            ttk.Label(self.sentiment_result_frame, text="無情緒資料", style='Error.TLabel').pack(pady=30)
+            return
+
+        # 標題資訊
+        header = ttk.Frame(self.sentiment_result_frame)
+        header.pack(fill='x', pady=(0, 15))
+
+        pair_display = result.get('pair', 'N/A')
+        tf_display = result.get('timeframe', 'N/A')
+        ttk.Label(header, text=f"貨幣對: {pair_display}  |  時間週期: {tf_display}", font=('Arial', 11, 'bold')).pack(side='left')
+
+        # 主要情緒卡片
+        cards_frame = ttk.Frame(self.sentiment_result_frame)
+        cards_frame.pack(fill='x', pady=10)
+
+        # 綜合情緒
+        score = sentiment.get('sentiment_score', 0.5)
+        signal = sentiment.get('signal', 'neutral')
+        confidence = sentiment.get('confidence', 0)
+
+        # 訊號顏色和文字
+        if signal == 'bullish':
+            signal_text = "🟢 看多"
+            signal_color = 'green'
+        elif signal == 'bearish':
+            signal_text = "🔴 看空"
+            signal_color = 'red'
+        else:
+            signal_text = "⚪ 中性"
+            signal_color = 'gray'
+
+        # 綜合情緒卡片
+        main_card = ttk.LabelFrame(cards_frame, text="綜合情緒", padding=15)
+        main_card.grid(row=0, column=0, padx=10, pady=5, sticky='nsew')
+        cards_frame.columnconfigure(0, weight=1)
+
+        ttk.Label(main_card, text=signal_text, font=('Arial', 18, 'bold'), foreground=signal_color).pack()
+        ttk.Label(main_card, text=f"分數: {score:.4f}").pack(pady=(5, 0))
+        ttk.Label(main_card, text=f"信心度: {confidence:.2%}").pack()
+
+        # 新聞情緒卡片
+        sources = sentiment.get('sources', {})
+        news_score = sources.get('news', 0.5)
+        cb_score = sources.get('central_bank', 0.5)
+
+        news_card = ttk.LabelFrame(cards_frame, text="新聞情緒", padding=15)
+        news_card.grid(row=0, column=1, padx=10, pady=5, sticky='nsew')
+        cards_frame.columnconfigure(1, weight=1)
+
+        news_signal = "看多" if news_score > 0.55 else ("看空" if news_score < 0.45 else "中性")
+        ttk.Label(news_card, text=f"{news_score:.4f}", font=('Arial', 16, 'bold')).pack()
+        ttk.Label(news_card, text=news_signal).pack(pady=(5, 0))
+
+        # 央行情緒卡片
+        cb_card = ttk.LabelFrame(cards_frame, text="央行情緒", padding=15)
+        cb_card.grid(row=0, column=2, padx=10, pady=5, sticky='nsew')
+        cards_frame.columnconfigure(2, weight=1)
+
+        cb_signal = "鷹派" if cb_score > 0.55 else ("鴿派" if cb_score < 0.45 else "中性")
+        ttk.Label(cb_card, text=f"{cb_score:.4f}", font=('Arial', 16, 'bold')).pack()
+        ttk.Label(cb_card, text=cb_signal).pack(pady=(5, 0))
+
+        # 詳細資訊
+        details_frame = ttk.LabelFrame(self.sentiment_result_frame, text="詳細資訊", padding=10)
+        details_frame.pack(fill='x', pady=(15, 0))
+
+        details = sentiment.get('details', {})
+        weights = sentiment.get('weights', {})
+
+        # 文章數量
+        row1 = ttk.Frame(details_frame)
+        row1.pack(fill='x', pady=3)
+        ttk.Label(row1, text="新聞文章:", width=15).pack(side='left')
+        ttk.Label(row1, text=f"{details.get('news_articles_analyzed', 0)} 篇").pack(side='left')
+
+        row2 = ttk.Frame(details_frame)
+        row2.pack(fill='x', pady=3)
+        ttk.Label(row2, text="央行文章:", width=15).pack(side='left')
+        ttk.Label(row2, text=f"{details.get('gov_articles_analyzed', 0)} 篇").pack(side='left')
+
+        # 權重
+        row3 = ttk.Frame(details_frame)
+        row3.pack(fill='x', pady=3)
+        ttk.Label(row3, text="新聞權重:", width=15).pack(side='left')
+        ttk.Label(row3, text=f"{weights.get('news', 0):.2%}").pack(side='left')
+
+        row4 = ttk.Frame(details_frame)
+        row4.pack(fill='x', pady=3)
+        ttk.Label(row4, text="央行權重:", width=15).pack(side='left')
+        ttk.Label(row4, text=f"{weights.get('central_bank', 0):.2%}").pack(side='left')
+
+        # 時間戳 (轉換為 GMT+8)
+        ts = sentiment.get('timestamp', '')
+        if ts:
+            row5 = ttk.Frame(details_frame)
+            row5.pack(fill='x', pady=3)
+            ttk.Label(row5, text="分析時間:", width=15).pack(side='left')
+            # 將 UTC 時間轉換為 GMT+8
+            try:
+                # 解析 ISO 格式時間戳 (例如 "2025-12-02T13:34:39.491128Z")
+                ts_clean = ts.replace('Z', '+00:00')
+                dt_utc = datetime.fromisoformat(ts_clean)
+                # 轉換為 GMT+8
+                gmt8 = timezone(timedelta(hours=8))
+                dt_gmt8 = dt_utc.astimezone(gmt8)
+                ts_display = dt_gmt8.strftime('%Y-%m-%d %H:%M:%S') + ' (GMT+8)'
+            except Exception:
+                ts_display = ts[:19].replace('T', ' ')
+            ttk.Label(row5, text=ts_display).pack(side='left')
 
     def logout(self):
         if messagebox.askyesno("確認", "確定登出?"):

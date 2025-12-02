@@ -33,4 +33,7 @@ router.get('/ml/models', adminController.getMLModels);
 router.get('/ml/status', adminController.getMLEngineStatus);
 router.post('/ml/retrain/:modelId', adminController.retrainModel);
 
+// 情緒分析
+router.get('/sentiment/test/:pair', adminController.testSentiment);
+
 module.exports = router;

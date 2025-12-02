@@ -1,9 +1,15 @@
 # Claude Code Rules for AIFX_v2
+# AIFX_v2 的 Claude Code 開發規則
 
 ## Project Overview
+## 專案概述
 AIFX_v2 is an AI-powered forex trading advisory system that provides trading signals and market analysis to users through web interface and Discord notifications.
+<!--
+AIFX_v2 是一個 AI 驅動的外匯交易顧問系統，透過網頁介面和 Discord 通知向用戶提供交易信號和市場分析。
+-->
 
 ## Core Architecture
+## 核心架構
 - Backend: Node.js with Express.js
 - Database: PostgreSQL with Sequelize ORM
 - Cache: Redis
@@ -11,10 +17,23 @@ AIFX_v2 is an AI-powered forex trading advisory system that provides trading sig
 - Frontend: React + Vite
 - Notifications: Discord.js
 - Real-time: Socket.io
+<!--
+- 後端: Node.js + Express.js
+- 資料庫: PostgreSQL + Sequelize ORM
+- 快取: Redis
+- ML 引擎: Python + TensorFlow/scikit-learn
+- 前端: React + Vite
+- 通知: Discord.js
+- 即時通訊: Socket.io
+-->
 
 ## 🏗️ Microservices Architecture Principles
+## 微服務架構原則
 
 **CRITICAL**: This system is being refactored to follow microservices architecture. These principles are MANDATORY for all future development.
+<!--
+**重要**: 此系統正在重構為微服務架構。所有未來開發必須遵循這些原則。
+-->
 
 ### Architecture Decision Record (2025-11-20)
 
@@ -297,8 +316,10 @@ For any new API endpoint, document:
 **Reference**: See `docs/api/` directory
 
 ## Development Principles
+## 開發原則
 
 ### 1. Code Style
+### 1. 程式碼風格
 - Use ES6+ syntax for all JavaScript code
 - Use async/await over callbacks
 - Implement proper error handling with try-catch blocks
@@ -307,7 +328,9 @@ For any new API endpoint, document:
 - Follow RESTful API conventions
 
 ### 2. Project Structure
+### 2. 專案結構
 Always maintain this directory structure:
+<!-- 請維持以下目錄結構 -->
 ```
 AIFX_v2/
 ├── backend/          # Node.js API server
@@ -318,7 +341,9 @@ AIFX_v2/
 ```
 
 ### 3. Security Requirements
+### 3. 安全性要求
 - Never commit API keys or secrets
+<!-- 絕不提交 API 金鑰或機密資料 -->
 - Use environment variables for all configurations
 - Implement JWT authentication with refresh tokens
 - Add rate limiting to all API endpoints
@@ -327,7 +352,9 @@ AIFX_v2/
 - Hash passwords with bcrypt (min 10 rounds)
 
 ### 4. API Design Rules
+### 4. API 設計規則
 - All endpoints must follow pattern: `/api/{version}/{resource}/{action}`
+<!-- 所有端點必須遵循模式: `/api/{版本}/{資源}/{動作}` -->
 - Return consistent JSON response format:
 ```javascript
 {
@@ -342,14 +369,18 @@ AIFX_v2/
 - Add request validation middleware
 
 ### 5. Database Guidelines
+### 5. 資料庫指南
 - All tables must have: id, created_at, updated_at
+<!-- 所有資料表必須有: id, created_at, updated_at -->
 - Use migrations for schema changes
 - Create indexes for frequently queried columns
 - Implement soft delete where appropriate
 - Use transactions for multi-table operations
 
 ### 6. Trading Logic Rules
+### 6. 交易邏輯規則
 - Never provide guaranteed profit claims
+<!-- 絕不承諾保證獲利 -->
 - Always include risk warnings in responses
 - Implement stop-loss recommendations
 - Log all trading signals for audit
@@ -357,29 +388,36 @@ AIFX_v2/
 - Handle API rate limits gracefully
 
 ### 7. ML Integration
+### 7. ML 引擎整合
 - Separate ML API from main backend
+<!-- 將 ML API 與主後端分離 -->
 - Version all models
 - Log prediction confidence scores
 - Implement fallback to technical indicators if ML fails
 - Store training metrics for monitoring
 
 ### 8. Testing Requirements
+### 8. 測試要求
 - Write unit tests for all services
+<!-- 為所有服務編寫單元測試 -->
 - Include integration tests for API endpoints
 - Test error scenarios
 - Mock external API calls
 - Maintain >70% code coverage
 
 ### 9. Performance Optimization
+### 9. 效能優化
 - Implement caching strategy for market data
+<!-- 實作市場數據快取策略 -->
 - Use connection pooling for database
 - Optimize database queries with indexes
 - Implement lazy loading where appropriate
 - Use CDN for static assets
 
 ### 10. Error Handling
+### 10. 錯誤處理
 ```javascript
-// Always use this error format
+// Always use this error format (請使用此錯誤格式)
 class AppError extends Error {
   constructor(message, statusCode, code) {
     super(message);
@@ -390,14 +428,17 @@ class AppError extends Error {
 ```
 
 ## Specific Implementation Guidelines
+## 具體實作指南
 
 ### Forex Data Service
+### 外匯數據服務
 - Primary: Alpha Vantage API (5 req/min limit)
 - Fallback: Twelve Data API (800 req/day)
 - Cache all responses in Redis (TTL: 60 seconds for real-time, 1 day for historical)
 - Implement exponential backoff for retries
 
 ### User Preferences Schema
+### 用戶偏好設定結構
 ```javascript
 {
   tradingFrequency: 'scalping' | 'daytrading' | 'swing' | 'position',
@@ -412,20 +453,25 @@ class AppError extends Error {
 ```
 
 ### Technical Indicators
+### 技術指標
 - Keep calculations simple and efficient
+<!-- 保持計算簡單高效 -->
 - Use ta-lib or technicalindicators library
 - Always validate input data
 - Return null for insufficient data
 
 ### Discord Notifications
+### Discord 通知
 - Rate limit: Max 1 notification per user per minute
+<!-- 速率限制: 每用戶每分鐘最多 1 則通知 -->
 - Format messages with embeds for better UX
 - Include timestamp and source in all alerts
 - Allow users to customize notification types
 
 ### ML Model Integration
+### ML 模型整合
 ```python
-# Standard prediction response format
+# Standard prediction response format (標準預測回應格式)
 {
   "prediction": "buy" | "sell" | "hold",
   "confidence": 0.0-1.0,
@@ -439,7 +485,9 @@ class AppError extends Error {
 ```
 
 ## Environment Variables
+## 環境變數
 Always require these environment variables:
+<!-- 必須設定以下環境變數 -->
 ```env
 NODE_ENV=development|production
 PORT=3000
@@ -454,8 +502,10 @@ ML_API_URL=http://localhost:8000
 ```
 
 ## Git Workflow & GitHub Integration
+## Git 工作流程與 GitHub 整合
 
 ### **🔐 GitHub Authentication**
+### **🔐 GitHub 認證**
 
 **GitHub Personal Access Token (PAT):**
 - PAT is stored in: `~/.git-credentials` (secure file with 600 permissions)
@@ -466,12 +516,17 @@ ML_API_URL=http://localhost:8000
 **IMPORTANT**: Always use the stored PAT to push to GitHub. No manual authentication needed.
 
 ### **🔄 Session-Based Commit Strategy**
+### **🔄 基於工作階段的提交策略**
 
 **IMPORTANT**: At the end of EVERY Claude Code session where changes were made, you MUST commit and push to GitHub.
+<!--
+**重要**: 每次 Claude Code 工作階段結束時，必須提交並推送所有變更到 GitHub。
+-->
 
 ### **Commit Frequency Rules**
+### **提交頻率規則**
 
-1. **After Every Conversation Session**
+1. **After Every Conversation Session** (每次對話結束後)
    - Commit all changes made during the session
    - Include descriptive commit message with context
    - Push to GitHub immediately
@@ -487,8 +542,10 @@ ML_API_URL=http://localhost:8000
    - Always commit before switching tasks
 
 ### **Commit Message Format**
+### **提交訊息格式**
 
 Use **Conventional Commits** specification:
+<!-- 使用 Conventional Commits 規範 -->
 
 ```
 <type>(<scope>): <subject>
@@ -811,7 +868,8 @@ Priority: Critical"
 ```
 
 ## Deployment Checklist
-- [ ] Environment variables configured
+## 部署檢查清單
+- [ ] Environment variables configured (環境變數已設定)
 - [ ] Database migrations run
 - [ ] Redis cache cleared
 - [ ] ML models deployed
@@ -823,7 +881,8 @@ Priority: Critical"
 - [ ] **Session changes documented in commit**
 
 ## Common Pitfalls to Avoid
-1. Don't store sensitive data in JWT
+## 常見錯誤避免
+1. Don't store sensitive data in JWT (不要在 JWT 中儲存敏感資料)
 2. Don't trust client-side calculations
 3. Don't make synchronous API calls
 4. Don't ignore rate limits
@@ -835,7 +894,8 @@ Priority: Critical"
 10. **Don't commit without session summary**
 
 ## Performance Metrics to Monitor
-- API response time < 200ms (p95)
+## 效能監控指標
+- API response time < 200ms (p95) (API 回應時間)
 - Database query time < 50ms (p95)
 - ML prediction time < 1000ms
 - WebSocket latency < 100ms
@@ -843,7 +903,9 @@ Priority: Critical"
 - Error rate < 1%
 
 ## Dependencies to Use
+## 使用的依賴套件
 ### Backend (Node.js)
+### 後端 (Node.js)
 - express: ^4.18.0
 - sequelize: ^6.0.0
 - jsonwebtoken: ^9.0.0
@@ -858,6 +920,7 @@ Priority: Critical"
 - dotenv: ^16.0.0
 
 ### ML Engine (Python)
+### ML 引擎 (Python)
 - tensorflow>=2.10.0
 - scikit-learn>=1.0.0
 - pandas>=1.5.0
@@ -867,6 +930,7 @@ Priority: Critical"
 - redis>=4.0.0
 
 ### Frontend (React)
+### 前端 (React)
 - react: ^18.2.0
 - vite: ^4.0.0
 - axios: ^1.0.0
@@ -876,8 +940,10 @@ Priority: Critical"
 - socket.io-client: ^4.0.0
 
 ## Response Examples
+## 回應範例
 
 ### Success Response
+### 成功回應
 ```javascript
 res.status(200).json({
   success: true,
@@ -892,6 +958,7 @@ res.status(200).json({
 ```
 
 ### Error Response
+### 錯誤回應
 ```javascript
 res.status(400).json({
   success: false,
@@ -902,7 +969,8 @@ res.status(400).json({
 ```
 
 ## Final Notes
-- Always prioritize user data security
+## 最後注意事項
+- Always prioritize user data security (始終優先考慮用戶資料安全)
 - Implement gradual rollout for new features
 - Maintain comprehensive documentation
 - Follow the principle of least privilege

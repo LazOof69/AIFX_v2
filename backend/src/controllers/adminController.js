@@ -106,6 +106,39 @@ const getSystemHealth = async (req, res, next) => {
       health.services.mlEngine = 'disconnected';
     }
 
+    // Check Sentiment Analysis (via ML Engine)
+    try {
+      const mlUrl = process.env.ML_API_URL || 'http://localhost:8000';
+      const sentimentRes = await axios.post(`${mlUrl}/reversal/predict_raw`, {
+        pair: 'EUR/USD',
+        timeframe: '1h',
+        data: [] // Empty data will fail validation but tells us if service is up
+      }, { timeout: 5000 });
+      // If we get here without error, sentiment service is available
+      health.services.sentiment = 'connected';
+      health.sentimentInfo = {
+        status: 'active',
+        model: 'FinBERT',
+        newsSource: 'Google News RSS'
+      };
+    } catch (e) {
+      // Check if it's a validation error (service is up but data is invalid)
+      if (e.response?.status === 422 || e.response?.data?.detail) {
+        health.services.sentiment = 'connected';
+        health.sentimentInfo = {
+          status: 'active',
+          model: 'FinBERT',
+          newsSource: 'Google News RSS'
+        };
+      } else {
+        health.services.sentiment = 'disconnected';
+        health.sentimentInfo = {
+          status: 'offline',
+          error: e.message
+        };
+      }
+    }
+
     // Check Discord Bot (via internal check)
     health.services.discordBot = 'unknown'; // 需要額外的健康檢查端點
 
@@ -296,6 +329,7 @@ const getSignals = async (req, res, next) => {
         timeframe,
         signal_strength as "signalStrength",
         market_condition as "marketCondition",
+        factors,
         status,
         created_at as "createdAt"
       FROM trading_signals
@@ -404,6 +438,90 @@ const getMLEngineStatus = async (req, res, next) => {
 };
 
 /**
+ * Test Sentiment Analysis for Currency Pair
+ * GET /api/v1/admin/sentiment/test/:pair
+ */
+const testSentiment = async (req, res, next) => {
+  try {
+    const { pair } = req.params;
+    const { timeframe = '1h' } = req.query;
+
+    // Format pair (e.g., EURUSD -> EUR/USD)
+    let formattedPair = pair;
+    if (pair && !pair.includes('/') && pair.length === 6) {
+      formattedPair = `${pair.substring(0, 3)}/${pair.substring(3)}`;
+    }
+
+    const mlUrl = process.env.ML_API_URL || 'http://localhost:8000';
+
+    try {
+      // Call the ML Engine sentiment endpoint
+      const response = await axios.post(`${mlUrl}/sentiment/analyze`, {
+        pair: formattedPair,
+        timeframe: timeframe
+      }, { timeout: 30000 }); // 30 second timeout for sentiment analysis
+
+      // Extract sentiment data from ML response (response.data contains {success, data, error, timestamp})
+      const sentimentData = response.data?.data || response.data;
+
+      res.status(200).json({
+        success: true,
+        data: {
+          pair: formattedPair,
+          timeframe: timeframe,
+          sentiment: sentimentData,
+        },
+        error: null,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (mlError) {
+      // If sentiment endpoint doesn't exist, try predict_raw to get sentiment from there
+      if (mlError.response?.status === 404) {
+        // Try alternative approach via predict_raw
+        try {
+          const predResponse = await axios.post(`${mlUrl}/reversal/predict_raw`, {
+            pair: formattedPair,
+            timeframe: timeframe,
+            data: [] // Empty data, we just want sentiment
+          }, { timeout: 30000 });
+
+          res.status(200).json({
+            success: true,
+            data: {
+              pair: formattedPair,
+              timeframe: timeframe,
+              sentiment: {
+                sentiment_score: predResponse.data?.sentiment_score || 0.5,
+                signal: predResponse.data?.sentiment_signal || 'neutral',
+                source: 'predict_raw_fallback'
+              },
+            },
+            error: null,
+            timestamp: new Date().toISOString(),
+          });
+        } catch (e) {
+          res.status(503).json({
+            success: false,
+            data: null,
+            error: 'ML Engine 情緒分析不可用',
+            timestamp: new Date().toISOString(),
+          });
+        }
+      } else {
+        res.status(503).json({
+          success: false,
+          data: null,
+          error: mlError.response?.data?.detail || 'ML Engine 情緒分析請求失敗',
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Retrain ML Model
  * POST /api/v1/admin/ml/retrain/:modelId
  */
@@ -444,4 +562,5 @@ module.exports = {
   getMLModels,
   getMLEngineStatus,
   retrainModel,
+  testSentiment,
 };

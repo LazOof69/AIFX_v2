@@ -4,12 +4,31 @@ FastAPI-based REST API for machine learning predictions and model training
 """
 
 # Fix for libgomp static TLS block error on ARM64
+# MUST be done before any other imports
 import os
 import ctypes
+
+# Disable curl-cffi for yfinance to avoid impersonation errors in systemd
+# MUST be set before any import of yfinance or curl_cffi
+os.environ['YF_NO_CURL_CFFI'] = '1'
+
+# First, try to load the system libgomp
 try:
     ctypes.CDLL('/usr/lib/aarch64-linux-gnu/libgomp.so.1', mode=ctypes.RTLD_GLOBAL)
-except Exception as e:
-    pass  # Ignore if not on ARM64 or libgomp not found
+except Exception:
+    pass
+
+# Then try to load sklearn's libgomp with RTLD_GLOBAL to reserve TLS early
+try:
+    sklearn_libgomp = '/root/AIFX_v2/ml_engine/venv/lib/python3.9/site-packages/scikit_learn.libs/libgomp-d22c30c5.so.1.0.0'
+    if os.path.exists(sklearn_libgomp):
+        ctypes.CDLL(sklearn_libgomp, mode=ctypes.RTLD_GLOBAL)
+except Exception:
+    pass
+
+# Now import sklearn BEFORE torch to ensure TLS is allocated correctly
+import sklearn
+import numpy as np
 
 from fastapi import FastAPI, HTTPException, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -485,6 +504,93 @@ except ImportError as e:
     model_manager = None
     prediction_service = None
     ab_framework = None
+
+
+# Import sentiment analyzer and create endpoint
+try:
+    from services.sentiment_analyzer import SentimentAnalyzer
+    sentiment_analyzer = SentimentAnalyzer()
+    logger.info("✅ Sentiment Analyzer initialized")
+
+    class SentimentRequest(BaseModel):
+        """Request model for sentiment analysis"""
+        pair: str = Field(..., description="Currency pair (e.g., EUR/USD)")
+        timeframe: str = Field(default="1h", description="Timeframe for sentiment analysis")
+
+    @app.post("/sentiment/analyze", tags=["Sentiment"])
+    async def analyze_sentiment(request: SentimentRequest):
+        """
+        Analyze market sentiment for a currency pair
+
+        Returns sentiment analysis including:
+        - News sentiment score
+        - Central bank policy sentiment
+        - Combined sentiment signal
+        - Confidence level
+        - Article counts
+        """
+        try:
+            logger.info(f"Sentiment analysis request: {request.pair}, timeframe={request.timeframe}")
+
+            result = sentiment_analyzer.analyze_sentiment(request.pair, request.timeframe)
+
+            return {
+                "success": True,
+                "data": result,
+                "error": None,
+                "timestamp": get_current_timestamp()
+            }
+
+        except Exception as e:
+            logger.error(f"Sentiment analysis error: {str(e)}", exc_info=True)
+            return {
+                "success": False,
+                "data": None,
+                "error": f"Sentiment analysis failed: {str(e)}",
+                "timestamp": get_current_timestamp()
+            }
+
+    @app.get("/sentiment/health", tags=["Sentiment"])
+    async def sentiment_health():
+        """
+        Check sentiment analysis service health
+        """
+        try:
+            has_finbert = sentiment_analyzer.sentiment_model is not None
+            has_vader = sentiment_analyzer.vader_analyzer is not None
+            has_newsapi = bool(sentiment_analyzer.news_api_key)
+
+            return {
+                "success": True,
+                "data": {
+                    "status": "healthy",
+                    "models": {
+                        "finbert": "loaded" if has_finbert else "not_loaded",
+                        "vader": "loaded" if has_vader else "not_loaded"
+                    },
+                    "news_sources": {
+                        "newsapi": "configured" if has_newsapi else "not_configured",
+                        "google_news_rss": "available"
+                    },
+                    "cache_size": len(sentiment_analyzer.cache),
+                    "cache_ttl_seconds": sentiment_analyzer.cache_ttl
+                },
+                "error": None,
+                "timestamp": get_current_timestamp()
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "data": None,
+                "error": str(e),
+                "timestamp": get_current_timestamp()
+            }
+
+    logger.info("✅ Sentiment API endpoints registered")
+
+except ImportError as e:
+    logger.warning(f"⚠️ Could not load sentiment analyzer: {e}")
+    sentiment_analyzer = None
 
 
 # Startup and shutdown events

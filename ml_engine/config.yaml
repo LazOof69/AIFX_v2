@@ -4,7 +4,7 @@
 server:
   host: "0.0.0.0"
   port: 8000
-  reload: true
+  reload: false  # Disabled to prevent curl-cffi issues with fork
   workers: 1
   log_level: "info"
 
