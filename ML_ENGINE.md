@@ -65,7 +65,8 @@ ml_engine/
 ├── models/                 # 訓練好的模型
 ├── saved_models/           # 儲存的模型權重
 ├── data_processing/        # 數據處理
-│   ├── twelvedata_fetcher.py  # Twelve Data API
+│   ├── twelvedata_fetcher.py  # Twelve Data API (主要)
+│   ├── yfinance_fetcher.py    # yfinance (備用)
 │   └── data_preprocessor.py   # 數據預處理
 ├── backtest/               # 回測系統
 ├── training/               # 模型訓練
@@ -149,13 +150,29 @@ early_stopping = EarlyStopping(patience=10)
 
 ## 情緒分析
 
-### 分析來源
+### 新聞數據混合來源
+
+本系統採用雙新聞來源確保高可用性：
+
+| 數據來源 | 優點 | 限制 | 用途 |
+|----------|------|------|------|
+| NewsAPI | 功能完整、多語言支援 | 免費版 100 req/day | 主要來源 |
+| Google News RSS | 完全免費、無限制 | 僅標題、英文為主 | 備用來源 |
+
+```
+新聞獲取策略:
+┌───────────────────────────────────────┐
+│  NewsAPI (主要)                       │
+│  └─→ 若失敗/配額用盡 → Google News RSS │
+└───────────────────────────────────────┘
+```
+
+### 分析模型
 
 | 來源 | 方法 | 說明 |
 |------|------|------|
 | 新聞情緒 | FinBERT | 金融專用 BERT 模型 |
 | 央行政策 | VADER + 關鍵字 | 貨幣政策情緒分析 |
-| Google News | RSS Feed | 即時新聞抓取 |
 
 ### FinBERT 模型
 
@@ -330,7 +347,16 @@ Response:
 
 ## 數據收集
 
-### Twelve Data API
+### 市場數據混合模式
+
+本系統採用混合數據來源確保高可用性：
+
+| 數據來源 | 優點 | 限制 | 用途 |
+|----------|------|------|------|
+| Twelve Data API | 數據品質高、即時性好 | 免費版 800 req/day | 主要來源 |
+| yfinance | 完全免費、無限制 | 延遲較高、資料格式不一 | 備用來源 |
+
+### Twelve Data API (主要)
 
 ```python
 # 即時數據
@@ -338,6 +364,16 @@ GET /time_series?symbol=EUR/USD&interval=1h&outputsize=100
 
 # 混合模式：資料庫 99 根 + API 1 根最新
 # 節省 99% API 配額
+```
+
+### yfinance (備用)
+
+```python
+import yfinance as yf
+
+# 當 Twelve Data 失敗時自動切換
+data = yf.download("EURUSD=X", period="1d", interval="1h")
+# 完全免費，無 API 限制
 ```
 
 ### Cron 排程

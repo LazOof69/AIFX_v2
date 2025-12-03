@@ -143,9 +143,11 @@ backend/
 
 #### forexService.js
 - 市場數據獲取
-- Twelve Data API 整合
+- **混合模式數據來源**:
+  - 主要: Twelve Data API (800 req/day)
+  - 備用: yfinance (無限制)
 - Redis 快取管理
-- 混合模式 (DB + API)
+- 混合模式 (DB 99根 + API 1根最新)
 
 #### tradingSignalService.js
 - 交易訊號生成
@@ -160,7 +162,9 @@ backend/
 #### mlEngineService.js
 - ML Engine API 客戶端
 - 預測請求處理
-- 情緒分析整合
+- **情緒分析混合來源**:
+  - 主要: NewsAPI (100 req/day)
+  - 備用: Google News RSS (無限制)
 
 ### 資料庫模型
 

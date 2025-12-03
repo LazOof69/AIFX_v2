@@ -432,10 +432,17 @@ class AppError extends Error {
 
 ### Forex Data Service
 ### 外匯數據服務
-- Primary: Alpha Vantage API (5 req/min limit)
-- Fallback: Twelve Data API (800 req/day)
+**市場數據混合模式**:
+- Primary: Twelve Data API (800 req/day)
+- Fallback: yfinance (unlimited, free)
 - Cache all responses in Redis (TTL: 60 seconds for real-time, 1 day for historical)
 - Implement exponential backoff for retries
+- Hybrid fetch: 99 bars from DB + 1 latest from API (saves 99% quota)
+
+**新聞情緒混合模式**:
+- Primary: NewsAPI (100 req/day free tier)
+- Fallback: Google News RSS (unlimited, free)
+- Auto-failover ensures high availability
 
 ### User Preferences Schema
 ### 用戶偏好設定結構
