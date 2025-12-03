@@ -70,8 +70,6 @@ discord_bot/
 | `/subscribe` | `[貨幣對]` `[時間框架]` | 訂閱信號變化通知 |
 | `/unsubscribe` | `[貨幣對]` `[時間框架]` | 取消訂閱 |
 | `/subscriptions` | - | 查看所有訂閱 |
-| `/position` | `[貨幣對]` | 查看持倉建議 |
-| `/preferences` | - | 設定交易偏好 |
 | `/trading-guide` | - | 顯示交易指南 |
 | `/ping` | - | 測試 Bot 連線 |
 
