@@ -363,4 +363,3 @@ Frontend ──REST/WS──► Backend ──REST──► ML Engine
 ---
 
 **最後更新**: 2025-12-02
-**整理者**: Claude Code
